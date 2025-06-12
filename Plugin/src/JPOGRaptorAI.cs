@@ -24,9 +24,9 @@ namespace JPOGRaptor {
         public AudioSource RaptorcallVoice = null!;
         public AudioSource RaptorStepsSFX = null!;
         public Transform MouthBone = null!;
-        private State ?previousState = null;
+        private State? previousState = null;
         private DeadBodyInfo? CarryingKilledPlayerBody = null;
-        #pragma warning restore 0649
+#pragma warning restore 0649
         float timeSinceHittingLocalPlayer;
         float timeSincePounceAttack;
         bool isDeadAnimationDone;
@@ -86,13 +86,14 @@ namespace JPOGRaptor {
 
         public override void Update() {
             base.Update();
-            if(isEnemyDead){
+            if (isEnemyDead) {
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
-                if(!isDeadAnimationDone){ 
+                if (!isDeadAnimationDone) {
                     LogIfDebugBuild("Stopping enemy voice with janky code.");
                     isDeadAnimationDone = true;
                     creatureVoice.Stop();
                     creatureVoice.PlayOneShot(dieSFX);
+                    DoAnimationClientRpc("stopBreath");
                 }
                 return;
             }
@@ -111,7 +112,7 @@ namespace JPOGRaptor {
                     PounceAttackClientRpc();
                 }
                 pounceTimer += Time.deltaTime;
-                if(pounceTimer < pounceDuration)
+                if (pounceTimer < pounceDuration)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: pouncing towards target player");
                     transform.position += pounceDirection * pounceSpeed * Time.deltaTime;
@@ -134,13 +135,13 @@ namespace JPOGRaptor {
         }
 
         public override void DoAIInterval() {
-            
+
             base.DoAIInterval();
             if (isEnemyDead || StartOfRound.Instance.allPlayersDead) {
                 return;
             };
 
-            switch(currentBehaviourStateIndex) {
+            switch (currentBehaviourStateIndex) {
                 case (int)State.SearchingForPlayer:
                     if (previousBehaviourStateIndex != (int)State.SearchingForPlayer)
                     {
@@ -151,7 +152,7 @@ namespace JPOGRaptor {
                         targetPlayer = null;
                         StartSearch(transform.position);
                     }
-                    if (FoundClosestPlayerInRange(25f, 3f)){
+                    if (FoundClosestPlayerInRange(25f, 3f)) {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Start Target Player");
                         StopSearch(currentSearch);
                         SwitchToBehaviourClientRpc((int)State.StalkingPlayer);
@@ -160,7 +161,7 @@ namespace JPOGRaptor {
 
 
                 case (int)State.StalkingPlayer:
-                    if(previousBehaviourStateIndex != (int)State.StalkingPlayer)
+                    if (previousBehaviourStateIndex != (int)State.StalkingPlayer)
                     {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Entered Stalking Player");
                         CallForHelp();
@@ -185,7 +186,7 @@ namespace JPOGRaptor {
                     break;
 
                 case (int)State.ChasingPlayer:
-                    if(previousBehaviourStateIndex != (int)State.ChasingPlayer)
+                    if (previousBehaviourStateIndex != (int)State.ChasingPlayer)
                     {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Entered Chasing Player");
                         StopSearch(currentSearch);
@@ -214,7 +215,7 @@ namespace JPOGRaptor {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: entered chasing target state, but the target = null. Attempting to set new target");
                         if (TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) < 20 && CheckLineOfSightForPosition(targetPlayer.transform.position)))
                         {
-                            if(targetPlayer != null)
+                            if (targetPlayer != null)
                             {
                                 LogIfDebugBuild($"JPOGRaptor[{raptorId}]: new target set");
                                 SetDestinationToPosition(targetPlayer.transform.position);
@@ -244,11 +245,11 @@ namespace JPOGRaptor {
                     }
                     //If the raptor is responding to a help call and its target was set it needs to move to that player
                     //As the raptor is responding to the help call, we assume it was in help call range to respond and move to the player
-                    if (targetPlayer != null && PlayerIsTargetable(targetPlayer,false, false))
+                    if (targetPlayer != null && PlayerIsTargetable(targetPlayer, false, false))
                     {
                         //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Help response. Target player != null, staying on target for");
                         SetDestinationToPosition(targetPlayer.transform.position);
-                        if(Vector3.Distance(transform.position, targetPlayer.transform.position) < 15)
+                        if (Vector3.Distance(transform.position, targetPlayer.transform.position) < 15)
                         {
                             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Help response. Got close enough to the target player, switching to regular chase mode");
                             respondingToHelpCall = false;
@@ -263,10 +264,10 @@ namespace JPOGRaptor {
                         SwitchToBehaviourServerRpc((int)State.SearchingForPlayer);
                     }
 
-                        break;
+                    break;
 
                 case (int)State.AttackingPlayer:
-                    if(previousBehaviourStateIndex != (int)State.AttackingPlayer)
+                    if (previousBehaviourStateIndex != (int)State.AttackingPlayer)
                     {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Entered attacking Player");
                         StateSwitchHelper(State.AttackingPlayer);
@@ -296,7 +297,7 @@ namespace JPOGRaptor {
                         break;
                     }
                     break;
-                    
+
                 default:
                     LogIfDebugBuild("This Behavior State doesn't exist!");
                     break;
@@ -305,14 +306,14 @@ namespace JPOGRaptor {
 
         bool FoundClosestPlayerInRange(float range, float senseRange) {
             TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: true);
-            if(targetPlayer == null){
+            if (targetPlayer == null) {
                 // Couldn't see a player, so we check if a player is in sensing distance instead
                 TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: false);
                 range = senseRange;
             }
             return targetPlayer != null && Vector3.Distance(transform.position, targetPlayer.transform.position) < range;
         }
-        
+
         bool TargetClosestPlayerInAnyCase() {
             mostOptimalDistance = 2000f;
             targetPlayer = null;
@@ -325,7 +326,7 @@ namespace JPOGRaptor {
                     targetPlayer = StartOfRound.Instance.allPlayerScripts[i];
                 }
             }
-            if(targetPlayer == null) return false;
+            if (targetPlayer == null) return false;
             return true;
         }
 
@@ -377,7 +378,7 @@ namespace JPOGRaptor {
 
         private void StateSwitchHelper(State state)
         {
-            if(previousState != state || previousState == null)
+            if (previousState != state || previousState == null)
             {
                 SetWallkingAnimationPerSate(state);
                 previousBehaviourStateIndex = (int)state;
@@ -450,10 +451,22 @@ namespace JPOGRaptor {
             if (playerControllerB != null)
             {
                 DoAnimationClientRpc("biteAttack");
-                LogIfDebugBuild("JPOGRaptor Collision with Player!");
+                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Collision with Player!");
                 timeSinceHittingLocalPlayer = 0f;
                 playerControllerB.DamagePlayer(30);
             }
+        }
+
+        public override void OnCollideWithEnemy(Collider other, EnemyAI collidedEnemy = null)
+        {
+            if (collidedEnemy == null || collidedEnemy is JPOGRaptorAI || isEnemyDead || collidedEnemy.isEnemyDead)
+            {
+                return; //Don't damage other raptors or when dead or to invalid enemies
+            }
+            LogIfDebugBuild("$JPOGRaptor[{raptorId}]: Collision with other valid enemy!");
+            base.OnCollideWithEnemy(other, collidedEnemy);
+            DoAnimationClientRpc("biteAttack");
+            collidedEnemy.HitEnemy(3, null, true);
         }
 
         public override void HitEnemy(int force = 1, PlayerControllerB? playerWhoHit = null, bool playHitSFX = false, int hitID = -1) {
@@ -472,7 +485,18 @@ namespace JPOGRaptor {
                     // We need to stop our search coroutine, because the game does not do that by default.
                     StopCoroutine(searchCoroutine);
                     KillEnemyOnOwnerClient();
+                    return;
                 }
+            }
+            // The Raptor Should target the player who hit them unless they are in the chasing state or attackingplayer state
+            // Other states should flow into the chasing state automatically
+            // Only during the searching for player state should the raptor quickly switch to chasing when hit
+            if (playerWhoHit != null) { 
+                targetPlayer = playerWhoHit;
+                if(currentBehaviourStateIndex == (int)State.SearchingForPlayer)
+                {
+                    SwitchToBehaviourServerRpc((int)State.ChasingPlayer);
+                }            
             }
         }
 
@@ -481,12 +505,6 @@ namespace JPOGRaptor {
             Vector3 to = base.transform.position - player.transform.position;
             to.y = 0f;
             return Vector3.Angle(player.transform.forward, to) < 68f;
-        }
-
-        //Helper method to set the target to null and other targetting related properties
-        public void ResetTarget()
-        {
-
         }
 
         //The Raptor Should be able to call for help
