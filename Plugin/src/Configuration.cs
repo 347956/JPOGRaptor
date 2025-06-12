@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Reflection;
-using BepInEx;
 using BepInEx.Configuration;
 
 namespace JPOGRaptor.Configuration {

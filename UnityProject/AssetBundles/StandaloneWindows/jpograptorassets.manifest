@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 890694136
+CRC: 3336237211
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: fa4be29fc4918fbd9a92b8d4cdd55ed8
+    Hash: f74a23edc415af4371013912fdbd6601
   TypeTreeHash:
     serializedVersion: 2
-    Hash: a618b0299e3b8ec66f2844e783a9595f
+    Hash: 244ad881dcaec6088584bf3f24f97bb6
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: fa4be29fc4918fbd9a92b8d4cdd55ed8
+    Hash: f74a23edc415af4371013912fdbd6601
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -30,18 +30,20 @@ ClassTypes:
   Script: {instanceID: 0}
 - Class: 54
   Script: {instanceID: 0}
-- Class: 64
-  Script: {instanceID: 0}
 - Class: 65
   Script: {instanceID: 0}
 - Class: 74
   Script: {instanceID: 0}
 - Class: 82
   Script: {instanceID: 0}
+- Class: 83
+  Script: {instanceID: 0}
 - Class: 91
   Script: {instanceID: 0}
 - Class: 95
   Script: {instanceID: 0}
+- Class: 114
+  Script: {fileID: -1797472241, guid: 23039411462530e4db6e4b247ea1f985, type: 3}
 - Class: 114
   Script: {fileID: 11500000, guid: 65d3fcb39dd67306e9bb17a603308070, type: 3}
 - Class: 114
@@ -60,13 +62,19 @@ ClassTypes:
   Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
 - Class: 114
   Script: {fileID: 11500000, guid: d3cecf05b78b173605122a700874719c, type: 3}
-- Class: 114
-  Script: {fileID: -1797472241, guid: 23039411462530e4db6e4b247ea1f985, type: 3}
 - Class: 115
+  Script: {instanceID: 0}
+- Class: 136
   Script: {instanceID: 0}
 - Class: 137
   Script: {instanceID: 0}
 - Class: 195
+  Script: {instanceID: 0}
+- Class: 241
+  Script: {instanceID: 0}
+- Class: 243
+  Script: {instanceID: 0}
+- Class: 245
   Script: {instanceID: 0}
 - Class: 329
   Script: {instanceID: 0}
@@ -81,13 +89,36 @@ SerializeReferenceClassIdentifiers:
   ClassName: Unity.Netcode.Components.NetworkAnimator/TransitionStateinfo
 Assets:
 - Assets/ModAssets/JPOGRaptor/Materials/Raptor.bmp
+- Assets/ModAssets/JPOGRaptor/Audio/Smallstep01.wav
 - Assets/ModAssets/JPOGRaptor/Materials/MapDotMat.mat
+- Assets/ModAssets/JPOGRaptor/Animations/Idle_Breath.anim
 - Assets/ModAssets/JPOGRaptor/JPOGRaptor.asset
-- Assets/ModAssets/JPOGRaptor/Models/Raptor.fbx
-- Assets/ModAssets/JPOGRaptor/Bestiary/JPOGRaptorTK.asset
+- Assets/ModAssets/JPOGRaptor/Animations/RaptorDie.anim
+- Assets/ModAssets/JPOGRaptor/Audio/GenSniff02.wav
+- Assets/ModAssets/JPOGRaptor/Audio/Gensnap.wav
+- Assets/ModAssets/JPOGRaptor/Animations/Walk.anim
+- Assets/ModAssets/JPOGRaptor/Models/RaptorV2.fbx
+- Assets/ModAssets/JPOGRaptor/Animations/Run.anim
 - Assets/ModAssets/JPOGRaptor/Bestiary/JPOGRaptor.webm
+- Assets/ModAssets/JPOGRaptor/Animations/ShortBark.anim
+- Assets/ModAssets/JPOGRaptor/Animations/Pounce.anim
+- Assets/ModAssets/JPOGRaptor/Bestiary/JPOGRaptorTK.asset
+- Assets/ModAssets/JPOGRaptor/Audio/RapBark02.wav
 - Assets/ModAssets/JPOGRaptor/JPOGRaptor.prefab
+- Assets/ModAssets/JPOGRaptor/Audio/RapBark03.wav
+- Assets/ModAssets/JPOGRaptor/Audio/RapBark01.wav
+- Assets/ModAssets/JPOGRaptor/Audio/RapAttack02.wav
+- Assets/ModAssets/JPOGRaptor/Animations/BIte.anim
+- Assets/ModAssets/JPOGRaptor/Animations/LongBark.anim
+- Assets/ModAssets/JPOGRaptor/Audio/RapCall01.wav
+- Assets/ModAssets/JPOGRaptor/Audio/RapAttack01.wav
+- Assets/ModAssets/JPOGRaptor/Audio/RapCall02.wav
+- Assets/ModAssets/JPOGRaptor/Audio/Smallstep02.wav
 - Assets/ModAssets/JPOGRaptor/JPOGRaptorAnimator.controller
-- Assets/ModAssets/JPOGRaptor/Materials/Raptor01.mat
+- Assets/ModAssets/JPOGRaptor/Audio/HitEnemyBody.ogg
+- Assets/ModAssets/JPOGRaptor/Animations/Pounce 1.anim
+- Assets/ModAssets/JPOGRaptor/Audio/RapHiss03.wav
 - Assets/ModAssets/JPOGRaptor/Bestiary/JPOGRaptorTN.asset
+- Assets/ModAssets/JPOGRaptor/Materials/Raptor01.mat
+- Assets/ModAssets/JPOGRaptor/Audio/RapHiss02.wav
 Dependencies: []

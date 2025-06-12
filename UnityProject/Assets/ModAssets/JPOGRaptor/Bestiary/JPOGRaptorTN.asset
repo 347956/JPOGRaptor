@@ -45,7 +45,7 @@ MonoBehaviour:
   returnFromStorage: 0
   itemCost: 0
   creatureFileID: 7014
-  creatureName: Example Enemy
+  creatureName: Raptor
   storyLogFileID: -1
   overrideOptions: 0
   acceptAnything: 0

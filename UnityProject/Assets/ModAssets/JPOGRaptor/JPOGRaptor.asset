@@ -66,7 +66,7 @@ MonoBehaviour:
   useNumberSpawnedFalloff: 0
   spawnInGroupsOf: 0
   requireNestObjectsToSpawn: 0
-  enemyPrefab: {fileID: 468140641407577897, guid: 7da6903f7cd918e4da069d62eab3019e,
+  enemyPrefab: {fileID: 3796245175031372056, guid: 286a57d25a7eccf4087ec48d50bb5129,
     type: 3}
   PowerLevel: 4
   MaxCount: 3
@@ -86,7 +86,7 @@ MonoBehaviour:
   canSeeThroughFog: 1
   pushPlayerForce: 0
   pushPlayerDistance: 0
-  SizeLimit: 0
+  SizeLimit: 2
   timeToPlayAudio: 0
   loudnessMultiplier: 0
   overrideVentSFX: {fileID: 0}
@@ -94,9 +94,9 @@ MonoBehaviour:
   nestSpawnPrefabWidth: 0
   useMinEnemyThresholdForNest: 0
   minEnemiesToSpawnNest: 0
-  hitBodySFX: {fileID: 0}
-  hitEnemyVoiceSFX: {fileID: 8300000, guid: 509a796b32c100191839545e866e8a9c, type: 3}
-  deathSFX: {fileID: 0}
-  stunSFX: {fileID: 0}
+  hitBodySFX: {fileID: 8300000, guid: b332079e20360e2438028aa44c546299, type: 3}
+  hitEnemyVoiceSFX: {fileID: 8300000, guid: 2ace8d5982b88a44386ba14dfa0988f0, type: 3}
+  deathSFX: {fileID: 8300000, guid: 2633577b47987d64bb0ce585416981a3, type: 3}
+  stunSFX: {fileID: 8300000, guid: c3cfa40eff629774ba7f03469f6d8932, type: 3}
   miscAnimations: []
   audioClips: []
