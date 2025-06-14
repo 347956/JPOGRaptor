@@ -26,31 +26,21 @@ namespace JPOGRaptor {
         public AudioSource RaptorStepsSFX = null!;
         public Transform MouthBone = null!;
         private State? previousState = null;
-        public State CurrentState { get; private set; } = State.SearchingForPlayer;
-        private DeadBodyInfo? CarryingKilledPlayerBody = null;
+        public DeadBodyInfo? CarryingKilledPlayerBody { get; private set; } = null;
 #pragma warning restore 0649
         float timeSinceHittingLocalPlayer;
-        public float timeSincePounceAttack { get; private set; } = 0f;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
         private bool inPounceAttack = false;
-        private bool pounceAttackDamage;
-        private bool inRangeForPounceAttack;
-        private bool pounceAttackComplete;
         public int raptorId { get; private set; }
         private bool isClimbing;
         private bool isWalking;
         private bool isRunning;
 
-        private RoundManager? roundManager;
-        private StartOfRound startOfRound;
-        private RaptorActionHelper raptorActionHelper;
+        private RoundManager roundManager = null!;
+        private StartOfRound startOfRound = null!;
+        private RaptorPounceHelper raptorPounceHelper = null!;
 
-
-        private float pounceTimer = 0f;
-        private float pounceDuration = 1f;
-        //private float pounceDistance = 10f;
-        private float pounceSpeed = 15f;
         public Vector3 pounceDirection { get; private set; }
         public Vector3 TargetPlayerlastPosition { get; private set; }
         public Vector3 TargetPlayerVelocity { get; private set; }
@@ -78,20 +68,23 @@ namespace JPOGRaptor {
 
         public override void Start() {
             base.Start();
-            raptorActionHelper = new RaptorActionHelper(this); // Initiate the action helper class
-            AllRaptors.Add(this);
-            this.raptorId = AllRaptors.Count - 1;
-            startOfRound = FindObjectOfType<StartOfRound>();
+            assignImportantValues();
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
-            timeSincePounceAttack = 10;
             creatureAnimator.SetTrigger("startWalk");
-            isDeadAnimationDone = false;
             // NOTE: Add your behavior states in your enemy script in Unity, where you can configure fun stuff
             // like a voice clip or an sfx clip to play when changing to that specific behavior state.
             currentBehaviourStateIndex = (int)State.SearchingForPlayer;
             // We make the enemy start searching. This will make it start wandering around.
             StartSearch(transform.position);
+        }
+        private void assignImportantValues()
+        {
+            AllRaptors.Add(this);
+            this.raptorId = AllRaptors.Count - 1;
+            startOfRound = FindObjectOfType<StartOfRound>() ?? throw new Exception("JPOGRaptor: StartOfRound not found!");
+            roundManager = FindObjectOfType<RoundManager>() ?? throw new Exception("JPOGRaptor: RoundManager not found!");
+            raptorPounceHelper = new RaptorPounceHelper(this); // Initiate the action helper class
         }
 
 
@@ -116,35 +109,13 @@ namespace JPOGRaptor {
                 turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
                 transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.Euler(new Vector3(0f, turnCompass.eulerAngles.y, 0f)), 4f * Time.deltaTime);
             }
-            if (targetPlayer != null && inPounceAttack)
-            {
-                turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
-                if (pounceAttackDamage)
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: calling pounce RPC");
-                    PounceAttackClientRpc();
-                }
-                pounceTimer += Time.deltaTime;
-                if (pounceTimer < pounceDuration)
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: pouncing towards target player");
-                    transform.position += pounceDirection * pounceSpeed * Time.deltaTime;
-                }
-                return;
-            }
-            if (targetPlayer != null)
-            {
-                //Rigidbody rb = targetPlayer.GetComponent<Rigidbody>();
-                //TargetPlayerVelocity = rb.velocity;
-                TargetPlayerVelocity = (targetPlayer.transform.position - TargetPlayerlastPosition) / Time.deltaTime;
-                TargetPlayerlastPosition = targetPlayer.transform.position;
-            }
+            raptorPounceHelper.MoveRaptorDuringPounce(targetPlayer);
             if (stunNormalizedTimer > 0f)
             {
                 agent.speed = 0f;
             }
             timeSinceHittingLocalPlayer += Time.deltaTime;
-            timeSincePounceAttack += Time.deltaTime;
+            raptorPounceHelper.UpdateTimeSincePounceAttack();
             // For debugging: logs if the raptors speed gets stuck at 0 despite having a target
             if (agent.speed < 0.1f && targetPlayer != null)
             {
@@ -224,9 +195,8 @@ namespace JPOGRaptor {
                             break;
                         }
 
-                        if (inRangeForPounceAttack)
+                        if (raptorPounceHelper.InRangeForPounceAttack)
                         {
-                            inRangeForPounceAttack = false;
                             SwitchToBehaviourServerRpc((int)State.AttackingPlayer);
                             break;
                         }
@@ -300,16 +270,14 @@ namespace JPOGRaptor {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Entered attacking Player");
                         StateSwitchHelper(State.AttackingPlayer);
 
-                        if (!inPounceAttack)
+                        if (!raptorPounceHelper.IsPouncing)
                         {
-                            pounceAttackComplete = false;
-                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning Pounce Coroutine");
-                            StartCoroutine(PounceAttack());
+                            raptorPounceHelper.StartPounce();
                         }
                         break;
                     }
 
-                    if (pounceAttackComplete)
+                    if (raptorPounceHelper.PounceAttackComplete)
                     {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Pounce Completed. Checking if switching to chase or search");
                         if (targetPlayer != null)
@@ -378,37 +346,11 @@ namespace JPOGRaptor {
             yield break;
         }
 
-
-        IEnumerator PounceAttack() {
-            inPounceAttack = true;
-            pounceAttackDamage = true;
-            Vector3 predictedPosition = targetPlayer.transform.position + TargetPlayerVelocity * pouncePredictionTime;
-            pounceDirection = (predictedPosition - transform.position).normalized;
-            //pounceSpeed = pounceDistance / pounceDuration;
-            pounceTimer = 0f;
-            DoAnimationClientRpc("pounceAttack");
-            yield return new WaitForSeconds(2.5f);
-            pounceAttackDamage = false;
-            yield return new WaitForSeconds(3f);
-            // In case the player has already gone away, we just yield break (basically same as return, but for IEnumerator)
-            if (currentBehaviourStateIndex != (int)State.AttackingPlayer)
-            {
-                yield break;
-            }
-            DropBodyInMouth();
-            timeSincePounceAttack = 0;
-            inPounceAttack = false;
-            SwitchToBehaviourServerRpc((int)State.ChasingPlayer);
-        }
-
-
-
         private void StateSwitchHelper(State state)
         {
             if (previousState != state || previousState == null)
             {
                 previousBehaviourStateIndex = (int)state;
-                CurrentState = state;
             }
             SeMovementSpeedPerSate(state);
         }
@@ -481,7 +423,7 @@ namespace JPOGRaptor {
             }
         }
 
-        public override void OnCollideWithEnemy(Collider other, EnemyAI collidedEnemy = null)
+        public override void OnCollideWithEnemy(Collider other, EnemyAI? collidedEnemy = null)
         {
             if (collidedEnemy == null || collidedEnemy is JPOGRaptorAI || isEnemyDead || collidedEnemy.isEnemyDead || !collidedEnemy.enemyType.canDie)
             {
@@ -504,8 +446,7 @@ namespace JPOGRaptor {
                     // Our death sound will be played through creatureVoice when KillEnemy() is called.
                     // KillEnemy() will also attempt to call creatureAnimator.SetTrigger("KillEnemy"),
                     // so we don't need to call a death animation ourselves.
-
-                    StopCoroutine(PounceAttack());
+                    raptorPounceHelper.CancelPounce();
                     // We need to stop our search coroutine, because the game does not do that by default.
                     StopCoroutine(searchCoroutine);
                     KillEnemyOnOwnerClient();
@@ -645,32 +586,6 @@ namespace JPOGRaptor {
             creatureAnimator.SetTrigger(animationName);
         }
 
-        [ClientRpc]
-        public void PounceAttackClientRpc() {
-            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: PounceAttackClientRPC");
-            int playerLayer = 1 << 3; // This can be found from the game's Asset Ripper output in Unity
-            Collider[] hitColliders = Physics.OverlapBox(attackArea.position, attackArea.localScale, Quaternion.identity, playerLayer);
-            if(hitColliders.Length > 0){
-                foreach (var player in hitColliders){
-                    PlayerControllerB playerControllerB = MeetsStandardPlayerCollisionConditions(player);
-                    if (playerControllerB != null)
-                    {
-                        if(CarryingKilledPlayerBody == null)
-                        {
-                            int playerId = (int)playerControllerB.playerClientId;
-                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Hit player [{playerId}]");
-                            playerControllerB.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Mauling, 0);
-                            TakeBodyInMouthServerRpc(playerId);
-                        }
-                        else
-                        {
-                            playerControllerB.DamagePlayer(40);
-                        }
-                    }
-                }
-            }
-        }
-
 
         [ServerRpc]
         public void CheckIfPlayersAreInPounceAreaServerRPC()
@@ -683,27 +598,7 @@ namespace JPOGRaptor {
         [ClientRpc]
         public void CheckIfPlayersAreInPounceAreaClientRPC()
         {
-            CheckIfPlayersAreInPounceArea();
-        }
-
-
-        public void CheckIfPlayersAreInPounceArea()
-        {
-            if (targetPlayer != null)
-            {
-                if (Vector3.Distance(transform.position, targetPlayer.transform.position) < 10)
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target Player in range for pounce attack!");
-                    if (timeSincePounceAttack >= 10f)
-                    {
-                        inRangeForPounceAttack = true;
-                    }
-                    else
-                    {
-                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target player was in pounce range, but pounce is on cooldown");
-                    }
-                }
-            }
+            raptorPounceHelper.CheckIfPlayersAreInRangeForPounceAttack();
         }
 
         public void SetInCall()
@@ -777,6 +672,12 @@ namespace JPOGRaptor {
                 CarryingKilledPlayerBody.matchPositionExactly = false;
                 CarryingKilledPlayerBody = null;
             }
+        }
+
+        [ClientRpc]
+        public void CheckRaptorPounceHitBoxesClientRPC()
+        {
+            raptorPounceHelper.CheckRaptorPounceHitBoxes();
         }
     }
 }
