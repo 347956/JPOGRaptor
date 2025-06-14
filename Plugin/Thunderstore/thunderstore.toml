@@ -22,7 +22,7 @@ source = "../bin/Release/netstandard2.1/JPOGRaptor.dll"
 target = "plugins/JPOGRaptor/"
 
 [[build.copy]]
-source = "../../UnityProject/AssetBundles/StandaloneWindows/modassets"
+source = "../../UnityProject/AssetBundles/StandaloneWindows/jpograptorassets"
 target = "plugins/JPOGRaptor/"
 
 [[build.copy]]
