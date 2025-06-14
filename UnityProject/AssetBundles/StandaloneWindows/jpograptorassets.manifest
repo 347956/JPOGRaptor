@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 23147460
+CRC: 489520299
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: 7a5c43239f23ab76285621e7cc1c535d
+    Hash: 3996231336a0ff8fc22f8f67aa2090d5
   TypeTreeHash:
     serializedVersion: 2
     Hash: 244ad881dcaec6088584bf3f24f97bb6
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: 7a5c43239f23ab76285621e7cc1c535d
+    Hash: 3996231336a0ff8fc22f8f67aa2090d5
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -119,6 +119,7 @@ Assets:
 - Assets/ModAssets/JPOGRaptor/Animations/Pounce 1.anim
 - Assets/ModAssets/JPOGRaptor/Audio/RapHiss03.wav
 - Assets/ModAssets/JPOGRaptor/Bestiary/JPOGRaptorTN.asset
-- Assets/ModAssets/JPOGRaptor/Materials/Raptor01.mat
+- Assets/ModAssets/JPOGRaptor/Animations/Grapple.anim
 - Assets/ModAssets/JPOGRaptor/Audio/RapHiss02.wav
+- Assets/ModAssets/JPOGRaptor/Materials/Raptor01.mat
 Dependencies: []

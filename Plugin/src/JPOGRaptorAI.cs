@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using GameNetcodeStuff;
+using JPOGRaptor.src;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -25,37 +26,44 @@ namespace JPOGRaptor {
         public AudioSource RaptorStepsSFX = null!;
         public Transform MouthBone = null!;
         private State? previousState = null;
+        public State CurrentState { get; private set; } = State.SearchingForPlayer;
         private DeadBodyInfo? CarryingKilledPlayerBody = null;
 #pragma warning restore 0649
         float timeSinceHittingLocalPlayer;
-        float timeSincePounceAttack;
+        public float timeSincePounceAttack { get; private set; } = 0f;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
         private bool inPounceAttack = false;
         private bool pounceAttackDamage;
         private bool inRangeForPounceAttack;
         private bool pounceAttackComplete;
-        private int raptorId = 99999;
+        public int raptorId { get; private set; }
+        private bool isClimbing;
+        private bool isWalking;
+        private bool isRunning;
 
         private RoundManager? roundManager;
+        private StartOfRound startOfRound;
+        private RaptorActionHelper raptorActionHelper;
 
 
         private float pounceTimer = 0f;
         private float pounceDuration = 1f;
         //private float pounceDistance = 10f;
         private float pounceSpeed = 15f;
-        private Vector3 pounceDirection;
-        private Vector3 TargetPlayerlastPosition;
-        private Vector3 TargetPlayerVelocity;
-        private float pouncePredictionTime = 1.5f;
+        public Vector3 pounceDirection { get; private set; }
+        public Vector3 TargetPlayerlastPosition { get; private set; }
+        public Vector3 TargetPlayerVelocity { get; private set; }
+        public readonly float pouncePredictionTime = 1.5f;
         private bool respondingToHelpCall = false;
         private float lastHeardCallDistanceWhenHeard;
 
         private Vector3 noisePositionGuess;
         private float noiseApproximation = 14f;
         private float previousAgentSpeed;
+        private bool wasOnOffMeshLink;
 
-        enum State {
+        public enum State {
             SearchingForPlayer,
             StalkingPlayer,
             ChasingPlayer,
@@ -70,8 +78,10 @@ namespace JPOGRaptor {
 
         public override void Start() {
             base.Start();
+            raptorActionHelper = new RaptorActionHelper(this); // Initiate the action helper class
             AllRaptors.Add(this);
             this.raptorId = AllRaptors.Count - 1;
+            startOfRound = FindObjectOfType<StartOfRound>();
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
             timeSincePounceAttack = 10;
@@ -84,9 +94,11 @@ namespace JPOGRaptor {
             StartSearch(transform.position);
         }
 
+
         public override void Update() {
             base.Update();
             SetWalkingAnimation(agent.speed);
+            CheckIfClimbing();
             if (isEnemyDead) {
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
                 if (!isDeadAnimationDone) {
@@ -133,6 +145,11 @@ namespace JPOGRaptor {
             }
             timeSinceHittingLocalPlayer += Time.deltaTime;
             timeSincePounceAttack += Time.deltaTime;
+            // For debugging: logs if the raptors speed gets stuck at 0 despite having a target
+            if (agent.speed < 0.1f && targetPlayer != null)
+            {
+                LogIfDebugBuild($"[WARN] Raptor[{raptorId}] has target but speed is zero! Current state: {(State)currentBehaviourStateIndex}");
+            }
         }
 
         public override void DoAIInterval() {
@@ -197,6 +214,16 @@ namespace JPOGRaptor {
                     {
                         //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target player != null, staying on target");
                         SetDestinationToPosition(targetPlayer.transform.position);
+
+                        // Check if the player is reachable in the ship
+                        if (!CheckIfTargetCanBeReachedInsideShip())
+                        {
+                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Target inside ship but raptor cannot reach, stopping chase.");
+                            targetPlayer = null;
+                            SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                            break;
+                        }
+
                         if (inRangeForPounceAttack)
                         {
                             inRangeForPounceAttack = false;
@@ -381,6 +408,7 @@ namespace JPOGRaptor {
             if (previousState != state || previousState == null)
             {
                 previousBehaviourStateIndex = (int)state;
+                CurrentState = state;
             }
             SeMovementSpeedPerSate(state);
         }
@@ -418,16 +446,20 @@ namespace JPOGRaptor {
                 if (agentSpeed == 0)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopped Moving T-Pose animation");
+                    isRunning = false;
+                    isWalking = false;
                     DoAnimationClientRpc("stopMove");
                 }
                 else if (agentSpeed > 0 && agentSpeed <= 5)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning walking animation");
+                    isWalking = true;
                     DoAnimationClientRpc("startWalk");
                 }
                 else if (agentSpeed > 5)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning running animation");
+                    isRunning = true;
                     DoAnimationClientRpc("startRun");
                 }
             }
@@ -451,7 +483,7 @@ namespace JPOGRaptor {
 
         public override void OnCollideWithEnemy(Collider other, EnemyAI collidedEnemy = null)
         {
-            if (collidedEnemy == null || collidedEnemy is JPOGRaptorAI || isEnemyDead || collidedEnemy.isEnemyDead)
+            if (collidedEnemy == null || collidedEnemy is JPOGRaptorAI || isEnemyDead || collidedEnemy.isEnemyDead || !collidedEnemy.enemyType.canDie)
             {
                 return; //Don't damage other raptors or when dead or to invalid enemies
             }
@@ -542,6 +574,7 @@ namespace JPOGRaptor {
                 }
             }
         }
+
         IEnumerator ReachtToHelp()
         {
             yield return new WaitForSeconds(1.5f);
@@ -549,6 +582,62 @@ namespace JPOGRaptor {
             yield break;
         }
 
+        // This should check if the player is still targetable for the raptor given the target player is inside the ship
+        // If the ship doors are closed, but the raptor is inside the ship: the target player is still valid
+        // If the ship doors are closed, but the raptor is outside the ship: the target player is no longer valid
+        public bool CheckIfTargetCanBeReachedInsideShip()
+        {
+            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Check: PlayerInShip={targetPlayer.isInHangarShipRoom}, DoorsClosed={startOfRound.hangarDoorsClosed}, RaptorInside={this.isInsidePlayerShip}");
+            // Safe null check FIRST
+            if (targetPlayer == null) return false;
+
+            // If the player is NOT inside the hangar ship room, it’s reachable
+            if (!targetPlayer.isInHangarShipRoom) return true;
+
+            // If doors open, it’s reachable
+            if (!startOfRound.hangarDoorsClosed) return true;
+
+            // If raptor is inside, it’s reachable
+            if (this.isInsidePlayerShip) return true;
+
+            // Else: player is inside ship, doors closed, raptor outside: not reachable
+            return false;
+        }
+
+        public void CheckIfClimbing()
+        {
+            if (agent.isOnOffMeshLink && !wasOnOffMeshLink)
+            {
+                // Just started climbing
+                wasOnOffMeshLink = true;
+                isClimbing = true;
+                creatureAnimator.SetBool("isClimbing", isClimbing);
+                LogIfDebugBuild($"Raptor[{raptorId}]: Started climbing.");
+            }
+            else if (!agent.isOnOffMeshLink && wasOnOffMeshLink)
+            {
+                // Just finished climbing
+                wasOnOffMeshLink = false;
+                isClimbing = false;
+                creatureAnimator.SetBool("isClimbing", isClimbing);
+                LogIfDebugBuild($"Raptor[{raptorId}]: Finished climbing.");
+                if(isRunning)
+                {
+                    agent.speed = 8;
+                    DoAnimationClientRpc("startRun");
+                }
+                else if (isWalking)
+                {
+                    agent.speed = 3;
+                    DoAnimationClientRpc("startWalk");
+                }
+                else
+                {
+                    agent.speed = 0;
+                    DoAnimationClientRpc("startWalk");
+                }
+            }
+        }
 
         [ClientRpc]
         public void DoAnimationClientRpc(string animationName) {
