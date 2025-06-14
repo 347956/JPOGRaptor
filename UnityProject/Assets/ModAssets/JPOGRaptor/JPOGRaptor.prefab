@@ -1481,14 +1481,14 @@ MonoBehaviour:
     OriginatingState: -137704939
     DestinationState: -1459219776
     TransitionDuration: 0.25
-    TriggerNameHash: 1397615125
+    TriggerNameHash: 836937528
     TransitionIndex: 0
   - IsCrossFadeExit: 0
     Layer: 0
     OriginatingState: -1331899992
     DestinationState: -1459219776
     TransitionDuration: 0.25
-    TriggerNameHash: 930619693
+    TriggerNameHash: 836937528
     TransitionIndex: 0
   - IsCrossFadeExit: 0
     Layer: 1

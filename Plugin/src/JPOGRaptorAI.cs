@@ -31,7 +31,6 @@ namespace JPOGRaptor {
         float timeSincePounceAttack;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
-        private bool isRunning;
         private bool inPounceAttack = false;
         private bool pounceAttackDamage;
         private bool inRangeForPounceAttack;
@@ -54,6 +53,7 @@ namespace JPOGRaptor {
 
         private Vector3 noisePositionGuess;
         private float noiseApproximation = 14f;
+        private float previousAgentSpeed;
 
         enum State {
             SearchingForPlayer,
@@ -86,6 +86,7 @@ namespace JPOGRaptor {
 
         public override void Update() {
             base.Update();
+            SetWalkingAnimation(agent.speed);
             if (isEnemyDead) {
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
                 if (!isDeadAnimationDone) {
@@ -361,7 +362,6 @@ namespace JPOGRaptor {
             DoAnimationClientRpc("pounceAttack");
             yield return new WaitForSeconds(2.5f);
             pounceAttackDamage = false;
-            agent.speed = 0;
             yield return new WaitForSeconds(3f);
             // In case the player has already gone away, we just yield break (basically same as return, but for IEnumerator)
             if (currentBehaviourStateIndex != (int)State.AttackingPlayer)
@@ -380,12 +380,12 @@ namespace JPOGRaptor {
         {
             if (previousState != state || previousState == null)
             {
-                SetWallkingAnimationPerSate(state);
                 previousBehaviourStateIndex = (int)state;
             }
+            SeMovementSpeedPerSate(state);
         }
 
-        private void SetWallkingAnimationPerSate(State state)
+        private void SeMovementSpeedPerSate(State state)
         {
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Adjusting speed and walking animation for state [{state}]");
             switch (state)
@@ -398,46 +398,38 @@ namespace JPOGRaptor {
                     agent.speed = 3;
                     break;
                 case State.ChasingPlayer:
-                    isRunning = true;
                     agent.speed = 8;
                     break;
                 case State.RespondingToCall:
-                    isRunning = true;
                     agent.speed = 10;
                     break;
                 case State.AttackingPlayer:
                     agent.speed = 0;
                     break;
             }
-            SetWalkingAnimation(agent.speed);
         }
 
         private void SetWalkingAnimation(float agentSpeed)
         {
-            if (agentSpeed == 0)
+            if (Mathf.Abs(previousAgentSpeed - agentSpeed) > 0.3f)
             {
-                if (isRunning)
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopping running animation");
-                    isRunning = false;
-                    DoAnimationClientRpc("stopRun");
-                }
-                else
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopping walking animation");
-                    DoAnimationClientRpc("stopWalk");
-                }
+                previousAgentSpeed = agentSpeed;
 
-            }
-            else if (agentSpeed > 0 && agentSpeed <= 5)
-            {
-                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning walking animation");
-                DoAnimationClientRpc("startWalk");
-            }
-            else if (agentSpeed > 5)
-            {
-                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning running animation");
-                DoAnimationClientRpc("startRun");
+                if (agentSpeed == 0)
+                {
+                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopped Moving T-Pose animation");
+                    DoAnimationClientRpc("stopMove");
+                }
+                else if (agentSpeed > 0 && agentSpeed <= 5)
+                {
+                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning walking animation");
+                    DoAnimationClientRpc("startWalk");
+                }
+                else if (agentSpeed > 5)
+                {
+                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning running animation");
+                    DoAnimationClientRpc("startRun");
+                }
             }
         }
 
