@@ -16,6 +16,8 @@ namespace JPOGRaptor.src
         private Coroutine? pounceCoroutine;
 
         private readonly float maxPounceTime = 4f; // safety timeout for pounce
+        private readonly float totalPounceTime = 4.13f; // safety timeout for pounce
+        private readonly float pounceDamagePeriod = 2.5f; // safety timeout for pounce
         private Vector3 pounceDirection;
         public bool IsPouncing { get; private set; } = false;
         private readonly int raptorId;
@@ -69,12 +71,12 @@ namespace JPOGRaptor.src
             LogIfDebugBuild($"Raptor[{raptorId}]: Pounce started toward {predictedPosition}");
 
             // Wait for damage window duration
-            yield return new WaitForSeconds(2.5f);
+            yield return new WaitForSeconds(pounceDamagePeriod);
             PounceAttackDamage = false;
 
             // Wait for rest of pounce to complete
             float timer = 0f;
-            while (timer < maxPounceTime && jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.AttackingPlayer)
+            while (timer < totalPounceTime - pounceDamagePeriod && jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.AttackingPlayer)
             {
                 timer += Time.deltaTime;
                 yield return null;
@@ -160,12 +162,13 @@ namespace JPOGRaptor.src
         {
             if (jPOGRaptorAI.targetPlayer != null)
             {
-                if (Vector3.Distance(jPOGRaptorAI.transform.position, jPOGRaptorAI.targetPlayer.transform.position) < 10)
+                float distance = Vector3.Distance(jPOGRaptorAI.transform.position, jPOGRaptorAI.targetPlayer.transform.position);
+                if (distance < 10f && HasClearLineToPlayer())
                 {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target Player in range for pounce attack!");
                     if (TimeSincePounceAttack >= 10f)
                     {
                         InRangeForPounceAttack = true;
+                        LogIfDebugBuild($"Raptor[{raptorId}]: Player in range and line clear for pounce!");
                     }
                     else
                     {
@@ -173,6 +176,39 @@ namespace JPOGRaptor.src
                     }
                 }
             }
+            else
+            {
+                InRangeForPounceAttack = false;
+            }
+        }
+
+        /// <summary>
+        /// Checks if the direct line to the target player is clear (no walls or obstacles).
+        /// </summary>
+        private bool HasClearLineToPlayer()
+        {
+            var player = jPOGRaptorAI.targetPlayer;
+            if (player == null) return false;
+
+            Vector3 from = jPOGRaptorAI.transform.position + Vector3.up * 1f;
+            Vector3 to = player.transform.position + Vector3.up * 1f;
+
+            bool blocked = Physics.Linecast(from, to, out RaycastHit hit);
+
+            if (blocked)
+            {
+                // Prevents the raycast from being blocked by the raptor's own colliders
+                if (hit.collider.transform.IsChildOf(jPOGRaptorAI.transform))
+                {
+                    blocked = false;
+                }
+                else
+                {
+                    LogIfDebugBuild($"Raptor[{raptorId}]: Line to player blocked by [{hit.collider.name}]");
+                }
+            }
+
+            return !blocked;
         }
 
         // Checks the for players in the pounce hitbox

@@ -37,9 +37,10 @@ namespace JPOGRaptor {
         private bool isWalking;
         private bool isRunning;
 
-        private RoundManager roundManager = null!;
-        private StartOfRound startOfRound = null!;
+        public RoundManager roundManager { get; private set; }  = null!;
+        //public StartOfRound startOfRound { get; private set; } = null!;
         private RaptorPounceHelper raptorPounceHelper = null!;
+        private RaptorTargetingHelper raptorTargetingHelper = null!;
 
         public Vector3 pounceDirection { get; private set; }
         public Vector3 TargetPlayerlastPosition { get; private set; }
@@ -82,9 +83,10 @@ namespace JPOGRaptor {
         {
             AllRaptors.Add(this);
             this.raptorId = AllRaptors.Count - 1;
-            startOfRound = FindObjectOfType<StartOfRound>() ?? throw new Exception("JPOGRaptor: StartOfRound not found!");
+            //startOfRound = FindObjectOfType<StartOfRound>() ?? throw new Exception("JPOGRaptor: StartOfRound not found!");
             roundManager = FindObjectOfType<RoundManager>() ?? throw new Exception("JPOGRaptor: RoundManager not found!");
             raptorPounceHelper = new RaptorPounceHelper(this); // Initiate the action helper class
+            raptorTargetingHelper = new RaptorTargetingHelper(this);
         }
 
 
@@ -141,7 +143,7 @@ namespace JPOGRaptor {
                         targetPlayer = null;
                         StartSearch(transform.position);
                     }
-                    if (FoundClosestPlayerInRange(25f, 3f)) {
+                    if (raptorTargetingHelper.FoundClosestPlayerInRange(25f, 3f)) {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Start Target Player");
                         StopSearch(currentSearch);
                         SwitchToBehaviourClientRpc((int)State.StalkingPlayer);
@@ -181,58 +183,42 @@ namespace JPOGRaptor {
                         StopSearch(currentSearch);
                         StateSwitchHelper(State.ChasingPlayer);
                     }
-                    if (targetPlayer != null)
+
+                    // Make sure there is a target
+                    if (!raptorTargetingHelper.EnsureTarget())
                     {
-                        //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target player != null, staying on target");
-                        SetDestinationToPosition(targetPlayer.transform.position);
-
-                        // Check if the player is reachable in the ship
-                        if (!CheckIfTargetCanBeReachedInsideShip())
-                        {
-                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Target inside ship but raptor cannot reach, stopping chase.");
-                            targetPlayer = null;
-                            SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
-                            break;
-                        }
-
-                        if (raptorPounceHelper.InRangeForPounceAttack)
-                        {
-                            SwitchToBehaviourServerRpc((int)State.AttackingPlayer);
-                            break;
-                        }
-                        CheckIfPlayersAreInPounceAreaServerRPC();
-                        if (Vector3.Distance(transform.position, targetPlayer.transform.position) > 30)
-                        {
-                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Player too far away, stopping chase.");
-                            SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
-                        }
+                        LogIfDebugBuild($"Raptor[{raptorId}]: No target found, switching to SearchingForPlayer");
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
                         break;
                     }
-                    if (targetPlayer == null)
+
+                    // Set Destination to the target player
+                    SetDestinationToPosition(targetPlayer.transform.position);
+
+                    // Check if the player is reachable in the ship
+                    if (!raptorTargetingHelper.CheckIfTargetCanBeReachedInsideShip())
                     {
-                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: entered chasing target state, but the target = null. Attempting to set new target");
-                        if (TargetClosestPlayerInAnyCase() || (Vector3.Distance(transform.position, targetPlayer.transform.position) < 20 && CheckLineOfSightForPosition(targetPlayer.transform.position)))
-                        {
-                            if (targetPlayer != null)
-                            {
-                                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: new target set");
-                                SetDestinationToPosition(targetPlayer.transform.position);
-                                break;
-                            }
-                            else
-                            {
-                                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Could not set target");
-                                SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: (Default) Could not set target");
-                            SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
-                            break;
-                        }
+                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Target inside ship but raptor cannot reach, stopping chase.");
+                        targetPlayer = null;
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                        break;
                     }
+
+                    CheckIfPlayersAreInPounceAreaServerRPC();
+                    // Switch to pounce behaviour sate if the player is in range for a pounce attack
+                    if (raptorPounceHelper.InRangeForPounceAttack)
+                    {
+                        SwitchToBehaviourServerRpc((int)State.AttackingPlayer);
+                        break;
+                    }
+
+                    // Check if the player is too far away
+                    if (raptorTargetingHelper.IsTargetTooFar())
+                    {
+                        LogIfDebugBuild($"Raptor[{raptorId}]: Target too far, switching to SearchingForPlayer");
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                    }
+
                     break;
 
                 case (int)State.RespondingToCall:
@@ -300,31 +286,7 @@ namespace JPOGRaptor {
             }
         }
 
-        bool FoundClosestPlayerInRange(float range, float senseRange) {
-            TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: true);
-            if (targetPlayer == null) {
-                // Couldn't see a player, so we check if a player is in sensing distance instead
-                TargetClosestPlayer(bufferDistance: 1.5f, requireLineOfSight: false);
-                range = senseRange;
-            }
-            return targetPlayer != null && Vector3.Distance(transform.position, targetPlayer.transform.position) < range;
-        }
 
-        bool TargetClosestPlayerInAnyCase() {
-            mostOptimalDistance = 2000f;
-            targetPlayer = null;
-            for (int i = 0; i < StartOfRound.Instance.connectedPlayersAmount + 1; i++)
-            {
-                tempDist = Vector3.Distance(transform.position, StartOfRound.Instance.allPlayerScripts[i].transform.position);
-                if (tempDist < mostOptimalDistance)
-                {
-                    mostOptimalDistance = tempDist;
-                    targetPlayer = StartOfRound.Instance.allPlayerScripts[i];
-                }
-            }
-            if (targetPlayer == null) return false;
-            return true;
-        }
 
         IEnumerator PlayBark(bool shortBark)
         {
@@ -465,12 +427,6 @@ namespace JPOGRaptor {
             }
         }
 
-        public bool PlayerHasHorizontalLOS(PlayerControllerB player)
-        {
-            Vector3 to = base.transform.position - player.transform.position;
-            to.y = 0f;
-            return Vector3.Angle(player.transform.forward, to) < 68f;
-        }
 
         //The Raptor Should be able to call for help
         public void CallForHelp()
@@ -523,27 +479,7 @@ namespace JPOGRaptor {
             yield break;
         }
 
-        // This should check if the player is still targetable for the raptor given the target player is inside the ship
-        // If the ship doors are closed, but the raptor is inside the ship: the target player is still valid
-        // If the ship doors are closed, but the raptor is outside the ship: the target player is no longer valid
-        public bool CheckIfTargetCanBeReachedInsideShip()
-        {
-            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Check: PlayerInShip={targetPlayer.isInHangarShipRoom}, DoorsClosed={startOfRound.hangarDoorsClosed}, RaptorInside={this.isInsidePlayerShip}");
-            // Safe null check FIRST
-            if (targetPlayer == null) return false;
 
-            // If the player is NOT inside the hangar ship room, it’s reachable
-            if (!targetPlayer.isInHangarShipRoom) return true;
-
-            // If doors open, it’s reachable
-            if (!startOfRound.hangarDoorsClosed) return true;
-
-            // If raptor is inside, it’s reachable
-            if (this.isInsidePlayerShip) return true;
-
-            // Else: player is inside ship, doors closed, raptor outside: not reachable
-            return false;
-        }
 
         public void CheckIfClimbing()
         {
@@ -591,7 +527,7 @@ namespace JPOGRaptor {
         public void CheckIfPlayersAreInPounceAreaServerRPC()
         {
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: checking if raptor can pounce");
-                CheckIfPlayersAreInPounceAreaClientRPC();                
+            CheckIfPlayersAreInPounceAreaClientRPC();                
         }
 
 
