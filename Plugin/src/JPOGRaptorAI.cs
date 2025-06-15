@@ -92,8 +92,8 @@ namespace JPOGRaptor {
 
         public override void Update() {
             base.Update();
-            SetWalkingAnimation(agent.speed);
             CheckIfClimbing();
+            SetWalkingAnimation(agent.speed);
             if (isEnemyDead) {
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
                 if (!isDeadAnimationDone) {
@@ -143,7 +143,7 @@ namespace JPOGRaptor {
                         targetPlayer = null;
                         StartSearch(transform.position);
                     }
-                    if (raptorTargetingHelper.FoundClosestPlayerInRange(25f, 3f)) {
+                    if (raptorTargetingHelper.FoundClosestPlayerInRange(25f, 5f)) {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Start Target Player");
                         StopSearch(currentSearch);
                         SwitchToBehaviourClientRpc((int)State.StalkingPlayer);
@@ -195,10 +195,11 @@ namespace JPOGRaptor {
                     // Set Destination to the target player
                     SetDestinationToPosition(targetPlayer.transform.position);
 
-                    // Check if the player is reachable in the ship
-                    if (!raptorTargetingHelper.CheckIfTargetCanBeReachedInsideShip())
+                    // Check if the player is reachable
+                    raptorTargetingHelper.UpdatePathTimeout(targetPlayer);
+                    if (!raptorTargetingHelper.CheckIfTargetPlayerIsReachable(targetPlayer))
                     {
-                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Target inside ship but raptor cannot reach, stopping chase.");
+                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Cannot reach the target and timed out");
                         targetPlayer = null;
                         SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
                         break;
@@ -350,19 +351,21 @@ namespace JPOGRaptor {
                 if (agentSpeed == 0)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopped Moving T-Pose animation");
-                    isRunning = false;
                     isWalking = false;
+                    isRunning = false;
                     DoAnimationClientRpc("stopMove");
                 }
                 else if (agentSpeed > 0 && agentSpeed <= 5)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning walking animation");
                     isWalking = true;
+                    isRunning = false;
                     DoAnimationClientRpc("startWalk");
                 }
                 else if (agentSpeed > 5)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning running animation");
+                    isWalking = false;
                     isRunning = true;
                     DoAnimationClientRpc("startRun");
                 }
@@ -398,10 +401,10 @@ namespace JPOGRaptor {
         }
 
         public override void HitEnemy(int force = 1, PlayerControllerB? playerWhoHit = null, bool playHitSFX = false, int hitID = -1) {
-            base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
             if(isEnemyDead){
                 return;
             }
+            base.HitEnemy(force, playerWhoHit, playHitSFX, hitID);
             enemyHP -= force;
             if (IsOwner) {
                 if (enemyHP <= 0 && !isEnemyDead) {
@@ -418,13 +421,11 @@ namespace JPOGRaptor {
             // The Raptor Should target the player who hit them unless they are in the chasing state or attackingplayer state
             // Other states should flow into the chasing state automatically
             // Only during the searching for player state should the raptor quickly switch to chasing when hit
-            if (playerWhoHit != null) { 
-                targetPlayer = playerWhoHit;
-                if(currentBehaviourStateIndex == (int)State.SearchingForPlayer)
-                {
-                    SwitchToBehaviourServerRpc((int)State.ChasingPlayer);
-                }            
+            if (playerWhoHit != null)
+            {
+                raptorTargetingHelper.TargetPlayerWhoHit(playerWhoHit);
             }
+
         }
 
 
@@ -513,7 +514,9 @@ namespace JPOGRaptor {
                     agent.speed = 0;
                     DoAnimationClientRpc("startWalk");
                 }
+                LogIfDebugBuild($"Raptor[{raptorId}]: After CheckIfClimbing: speed=[{agent.speed}], isRunning=[{isRunning}], isWalking=[{isWalking}]");
             }
+
         }
 
         [ClientRpc]

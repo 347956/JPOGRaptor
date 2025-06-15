@@ -1,10 +1,6 @@
 ﻿using GameNetcodeStuff;
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
-using Unity.Netcode;
 using UnityEngine;
 
 namespace JPOGRaptor.src
@@ -12,15 +8,15 @@ namespace JPOGRaptor.src
     internal class RaptorPounceHelper
     {
 
-        private readonly JPOGRaptorAI jPOGRaptorAI;
         private Coroutine? pounceCoroutine;
-
-        private readonly float maxPounceTime = 4f; // safety timeout for pounce
+        private readonly JPOGRaptorAI jPOGRaptorAI;
         private readonly float totalPounceTime = 4.13f; // safety timeout for pounce
         private readonly float pounceDamagePeriod = 2.5f; // safety timeout for pounce
-        private Vector3 pounceDirection;
-        public bool IsPouncing { get; private set; } = false;
         private readonly int raptorId;
+
+        private Vector3 pounceDirection;
+
+        public bool IsPouncing { get; private set; } = false;
         public bool PounceAttackDamage { get; private set; } = false;
         public float TimeSincePounceAttack { get; private set; } = 10f;
         public bool PounceAttackComplete { get; private set; } = false;
@@ -231,11 +227,12 @@ namespace JPOGRaptor.src
                     PlayerControllerB playerControllerB = jPOGRaptorAI.MeetsStandardPlayerCollisionConditions(player);
                     if (playerControllerB != null)
                     {
+                        //int chosenDeathAnimation = (UnityEngine.Random.value < 0.9f) ? 9 : 0;
                         if (jPOGRaptorAI.CarryingKilledPlayerBody == null)
                         {
                             int playerId = (int)playerControllerB.playerClientId;
                             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Hit player [{playerId}]");
-                            playerControllerB.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Mauling, 0);
+                            playerControllerB.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Mauling, 9);
                             jPOGRaptorAI.TakeBodyInMouthServerRpc(playerId);
                         }
                         else
