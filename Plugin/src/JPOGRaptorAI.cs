@@ -92,8 +92,7 @@ namespace JPOGRaptor {
 
         public override void Update() {
             base.Update();
-            CheckIfClimbing();
-            SetWalkingAnimation(agent.speed);
+
             if (isEnemyDead) {
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
                 if (!isDeadAnimationDone) {
@@ -106,6 +105,10 @@ namespace JPOGRaptor {
                 return;
             }
             var state = currentBehaviourStateIndex;
+            CheckIfClimbing();
+            float speed = agent.velocity.magnitude;
+            SetWalkingAnimation(agent.speed);
+
             if (targetPlayer != null && (state != (int)State.SearchingForPlayer))
             {
                 turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
@@ -119,7 +122,7 @@ namespace JPOGRaptor {
             timeSinceHittingLocalPlayer += Time.deltaTime;
             raptorPounceHelper.UpdateTimeSincePounceAttack();
             // For debugging: logs if the raptors speed gets stuck at 0 despite having a target
-            if (agent.speed < 0.1f && targetPlayer != null)
+            if (agent.speed < 0.1f && targetPlayer != null && currentBehaviourStateIndex != (int)State.AttackingPlayer)
             {
                 LogIfDebugBuild($"[WARN] Raptor[{raptorId}] has target but speed is zero! Current state: {(State)currentBehaviourStateIndex}");
             }
@@ -344,10 +347,13 @@ namespace JPOGRaptor {
 
         private void SetWalkingAnimation(float agentSpeed)
         {
+            if (currentBehaviourStateIndex == (int)State.AttackingPlayer) {
+                return;            
+            }
+
             if (Mathf.Abs(previousAgentSpeed - agentSpeed) > 0.3f)
             {
                 previousAgentSpeed = agentSpeed;
-
                 if (agentSpeed == 0)
                 {
                     LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopped Moving T-Pose animation");
@@ -357,14 +363,12 @@ namespace JPOGRaptor {
                 }
                 else if (agentSpeed > 0 && agentSpeed <= 5)
                 {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning walking animation");
                     isWalking = true;
                     isRunning = false;
                     DoAnimationClientRpc("startWalk");
                 }
                 else if (agentSpeed > 5)
                 {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Beginning running animation");
                     isWalking = false;
                     isRunning = true;
                     DoAnimationClientRpc("startRun");
@@ -525,6 +529,12 @@ namespace JPOGRaptor {
             creatureAnimator.SetTrigger(animationName);
         }
 
+        [ClientRpc]
+        public void SetAnimationWalkingSpeedRPC(float speed)
+        {
+            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: setting blend tree moving speed to = [{speed}]");
+            creatureAnimator.SetFloat("moveSpeed", speed, 0.1f, Time.deltaTime);
+        }
 
         [ServerRpc]
         public void CheckIfPlayersAreInPounceAreaServerRPC()

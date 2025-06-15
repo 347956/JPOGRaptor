@@ -10,7 +10,7 @@ namespace JPOGRaptor.src
 
         private Coroutine? pounceCoroutine;
         private readonly JPOGRaptorAI jPOGRaptorAI;
-        private readonly float totalPounceTime = 4.13f; // safety timeout for pounce
+        private readonly float totalPounceTime = 4.5f; // safety timeout for pounce
         private readonly float pounceDamagePeriod = 2.5f; // safety timeout for pounce
         private readonly int raptorId;
 

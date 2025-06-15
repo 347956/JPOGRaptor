@@ -1,15 +1,15 @@
 ManifestFileVersion: 0
-CRC: 341113375
+CRC: 4139638780
 Hashes:
   AssetFileHash:
     serializedVersion: 2
-    Hash: dff05bbd67da8f929a7e9f83911321ce
+    Hash: 2fc808676f863d720017152b6a45f315
   TypeTreeHash:
     serializedVersion: 2
     Hash: 244ad881dcaec6088584bf3f24f97bb6
   IncrementalBuildHash:
     serializedVersion: 2
-    Hash: dff05bbd67da8f929a7e9f83911321ce
+    Hash: 2fc808676f863d720017152b6a45f315
 HashAppended: 0
 ClassTypes:
 - Class: 1
@@ -107,6 +107,7 @@ Assets:
 - Assets/ModAssets/JPOGRaptor/JPOGRaptor.prefab
 - Assets/ModAssets/JPOGRaptor/Audio/RapBark03.wav
 - Assets/ModAssets/JPOGRaptor/Audio/RapBark01.wav
+- Assets/ModAssets/JPOGRaptor/Animations/Idle.anim
 - Assets/ModAssets/JPOGRaptor/Audio/RapAttack02.wav
 - Assets/ModAssets/JPOGRaptor/Animations/BIte.anim
 - Assets/ModAssets/JPOGRaptor/Animations/LongBark.anim
