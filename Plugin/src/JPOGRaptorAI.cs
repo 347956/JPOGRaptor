@@ -34,8 +34,6 @@ namespace JPOGRaptor {
         private bool inPounceAttack = false;
         public int raptorId { get; private set; }
         private bool isClimbing;
-        private bool isWalking;
-        private bool isRunning;
         public NetworkVariable<float> CurrentSpeed = new(writePerm: NetworkVariableWritePermission.Owner);
 
 
@@ -529,7 +527,6 @@ namespace JPOGRaptor {
                 isClimbing = false;
                 SetAnimationBoolClientRPC("isClimbing", isClimbing);
                 LogIfDebugBuild($"Raptor[{raptorId}]: Finished climbing.");
-                LogIfDebugBuild($"Raptor[{raptorId}]: After CheckIfClimbing: speed=[{agent.speed}], isRunning=[{isRunning}], isWalking=[{isWalking}]");
             }
         }
 
