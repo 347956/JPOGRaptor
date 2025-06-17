@@ -1422,6 +1422,8 @@ MonoBehaviour:
   RaptorcallVoice: {fileID: 7814526968493726421}
   RaptorStepsSFX: {fileID: 4223028594017768486}
   MouthBone: {fileID: 6770262039985688500}
+  CurrentSpeed:
+    m_InternalValue: 0
 --- !u!114 &242483001244820256
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1478,18 +1480,11 @@ MonoBehaviour:
   TransitionStateInfoList:
   - IsCrossFadeExit: 0
     Layer: 0
-    OriginatingState: -137704939
-    DestinationState: -1459219776
+    OriginatingState: -2089788878
+    DestinationState: 1980213187
     TransitionDuration: 0.25
-    TriggerNameHash: 836937528
-    TransitionIndex: 0
-  - IsCrossFadeExit: 0
-    Layer: 0
-    OriginatingState: -1331899992
-    DestinationState: -1459219776
-    TransitionDuration: 0.25
-    TriggerNameHash: 836937528
-    TransitionIndex: 0
+    TriggerNameHash: 1849064507
+    TransitionIndex: 1
   - IsCrossFadeExit: 0
     Layer: 1
     OriginatingState: 2136002017

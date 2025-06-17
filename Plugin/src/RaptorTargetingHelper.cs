@@ -54,21 +54,23 @@ namespace JPOGRaptor.src
             {
                 if (player == null) continue;
 
-
                 float dist = Vector3.Distance(jPOGRaptorAI.transform.position, player.transform.position);
+                if (dist >= closestDist) continue;
 
-                bool hasLOS = !requireLOS || jPOGRaptorAI.CheckLineOfSightForPosition(player.transform.position);
-                bool reachable = CheckIfTargetCanBeReachedInsideShip(player);
+                if(requireLOS && !jPOGRaptorAI.CheckLineOfSightForPosition(player.transform.position)) continue;
+                
+                if(!CheckIfTargetCanBeReachedInsideShip(player) && !CheckTargetPathReachability(player)) continue;
 
-                if (dist < closestDist && hasLOS && reachable)
-                {
-                    if (!CheckIfTargetCanBeReachedInsideShip(player)) continue;
-
-                    bestTarget = player;
-                    closestDist = dist;
-                }
+                bestTarget = player;
+                closestDist = dist;
+                LogIfDebugBuild($"Raptor[{raptorId}]: Candidate {player.playerUsername}, dist={dist}, reachable={true}, hasLOS={true}");
             }
             jPOGRaptorAI.targetPlayer = bestTarget;
+            if (bestTarget != null)
+            {
+                jPOGRaptorAI.targetPlayer = bestTarget;
+                LogIfDebugBuild($"Raptor[{raptorId}]: Found Closest Target Player!");
+            }
 
             return bestTarget != null;
         }
@@ -89,8 +91,6 @@ namespace JPOGRaptor.src
             }
             return true;
         }
-
-
         /// <summary>
         /// Checks whether the target player is currently reachable, considering navmesh & ship door.
         /// Updates the timeout timer if not reachable.

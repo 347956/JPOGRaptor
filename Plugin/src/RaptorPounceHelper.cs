@@ -9,7 +9,7 @@ namespace JPOGRaptor.src
     {
 
         private Coroutine? pounceCoroutine;
-        private readonly JPOGRaptorAI jPOGRaptorAI;
+        private readonly JPOGRaptorAI jpogRaptorAI;
         private readonly float totalPounceTime = 4.5f; // safety timeout for pounce
         private readonly float pounceDamagePeriod = 2.5f; // safety timeout for pounce
         private readonly int raptorId;
@@ -32,7 +32,7 @@ namespace JPOGRaptor.src
 
         public RaptorPounceHelper(JPOGRaptorAI jPOGRaptorAI)
         {
-            this.jPOGRaptorAI = jPOGRaptorAI;
+            this.jpogRaptorAI = jPOGRaptorAI;
             this.raptorId = jPOGRaptorAI.raptorId;
         }
 
@@ -45,25 +45,26 @@ namespace JPOGRaptor.src
         public void StartPounce()
         {
             if (IsPouncing) return;
-            pounceCoroutine = jPOGRaptorAI.StartCoroutine(pounceRoutine());
+            pounceCoroutine = jpogRaptorAI.StartCoroutine(pounceRoutine());
         }
 
         private IEnumerator pounceRoutine()
         {
+            //jpogRaptorAI.agent.enabled = false; // turn off NavMeshAgent when moving manually
             IsPouncing = true;
             PounceAttackDamage = true;
             PounceAttackComplete = false;
             TimeSincePounceAttack = Time.deltaTime;
 
             // Predict future player position
-            Vector3 predictedPosition = jPOGRaptorAI.targetPlayer != null
-            ? jPOGRaptorAI.targetPlayer.transform.position + pounceTargetPlayerVelocity * pouncePredictionTime
-            : jPOGRaptorAI.transform.forward * 5f;
+            Vector3 predictedPosition = jpogRaptorAI.targetPlayer != null
+            ? jpogRaptorAI.targetPlayer.transform.position + pounceTargetPlayerVelocity * pouncePredictionTime
+            : jpogRaptorAI.transform.forward * 5f;
 
-            pounceDirection = (predictedPosition - jPOGRaptorAI.transform.position).normalized;
+            pounceDirection = (predictedPosition - jpogRaptorAI.transform.position).normalized;
 
             // Play pounce animation on all clients
-            jPOGRaptorAI.DoAnimationClientRpc("pounceAttack");
+            jpogRaptorAI.DoAnimationClientRpc("pounceAttack");
             LogIfDebugBuild($"Raptor[{raptorId}]: Pounce started toward {predictedPosition}");
 
             // Wait for damage window duration
@@ -72,29 +73,41 @@ namespace JPOGRaptor.src
 
             // Wait for rest of pounce to complete
             float timer = 0f;
-            while (timer < totalPounceTime - pounceDamagePeriod && jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.AttackingPlayer)
+            while (timer < totalPounceTime - pounceDamagePeriod && jpogRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.AttackingPlayer)
             {
                 timer += Time.deltaTime;
                 yield return null;
             }
 
             // If state switched away, exit safely
-            if (jPOGRaptorAI.currentBehaviourStateIndex != (int)JPOGRaptorAI.State.AttackingPlayer)
+            if (jpogRaptorAI.currentBehaviourStateIndex != (int)JPOGRaptorAI.State.AttackingPlayer)
             {
                 LogIfDebugBuild($"Raptor[{raptorId}]: Pounce aborted because state changed");
                 ResetPounceFlags();
                 yield break;
             }
             // Perform any wrap up: drop body, clean up
-            jPOGRaptorAI.DropBodyInMouthServerRpc();
+            jpogRaptorAI.DropBodyInMouthServerRpc();
 
             // Reset pounce flags
             ResetPounceFlags();
+            //jPOGRaptorAI.SetAnimationBoolClientRPC("pounceComplete", true);
         }
 
 
         private void ResetPounceFlags()
         {
+
+            LogIfDebugBuild($"Raptor[{raptorId}]: resetting pounce flags");
+            //jpogRaptorAI.agent.enabled = true;
+            //jpogRaptorAI.agent.Warp(jpogRaptorAI.transform.position);
+            //jpogRaptorAI.agent.speed = 8f; // manually set speed again the prevent a jitter in the locomotion blend tree
+            // Manually set the destination to prevent the navmesh agent from not having a destination set after the pounce ends
+/*            if (jpogRaptorAI.targetPlayer != null)
+            {
+                jpogRaptorAI.agent.SetDestination(jpogRaptorAI.targetPlayer.transform.position);
+            }*/
+
             IsPouncing = false;
             PounceAttackDamage = false;
             PounceAttackComplete = true;
@@ -108,7 +121,7 @@ namespace JPOGRaptor.src
         {
             if (pounceCoroutine != null)
             {
-                jPOGRaptorAI.StopCoroutine(pounceCoroutine);
+                jpogRaptorAI.StopCoroutine(pounceCoroutine);
                 pounceCoroutine = null;
             }
             IsPouncing = false;
@@ -137,28 +150,28 @@ namespace JPOGRaptor.src
         public void MoveRaptorDuringPounce(PlayerControllerB? targetPlayer)
         {
             if (targetPlayer == null || !IsPouncing) return;
-            jPOGRaptorAI.turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
+            jpogRaptorAI.turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
             PounceTargetting(targetPlayer);
 
             if (PounceAttackDamage)
             {
-                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: calling pounce RPC");
-                jPOGRaptorAI.CheckRaptorPounceHitBoxesClientRPC();
+                //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: calling pounce RPC");
+                jpogRaptorAI.CheckRaptorPounceHitBoxesClientRPC();
             }
             UpdatePounceTimer();
             if (PounceTimer < PounceDuration)
             {
-                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: pouncing towards target player");
-                jPOGRaptorAI.transform.position += pounceDirection * PounceSpeed * Time.deltaTime;
+                //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: pouncing towards target player");
+                jpogRaptorAI.transform.position += pounceDirection * PounceSpeed * Time.deltaTime;
             }
         }
 
         // Checks if player are in range for a pounce attack
         public void CheckIfPlayersAreInRangeForPounceAttack()
         {
-            if (jPOGRaptorAI.targetPlayer != null)
+            if (jpogRaptorAI.targetPlayer != null)
             {
-                float distance = Vector3.Distance(jPOGRaptorAI.transform.position, jPOGRaptorAI.targetPlayer.transform.position);
+                float distance = Vector3.Distance(jpogRaptorAI.transform.position, jpogRaptorAI.targetPlayer.transform.position);
                 if (distance < 10f && HasClearLineToPlayer())
                 {
                     if (TimeSincePounceAttack >= 10f)
@@ -183,10 +196,10 @@ namespace JPOGRaptor.src
         /// </summary>
         private bool HasClearLineToPlayer()
         {
-            var player = jPOGRaptorAI.targetPlayer;
+            var player = jpogRaptorAI.targetPlayer;
             if (player == null) return false;
 
-            Vector3 from = jPOGRaptorAI.transform.position + Vector3.up * 1f;
+            Vector3 from = jpogRaptorAI.transform.position + Vector3.up * 1f;
             Vector3 to = player.transform.position + Vector3.up * 1f;
 
             bool blocked = Physics.Linecast(from, to, out RaycastHit hit);
@@ -194,7 +207,7 @@ namespace JPOGRaptor.src
             if (blocked)
             {
                 // Prevents the raycast from being blocked by the raptor's own colliders
-                if (hit.collider.transform.IsChildOf(jPOGRaptorAI.transform))
+                if (hit.collider.transform.IsChildOf(jpogRaptorAI.transform))
                 {
                     blocked = false;
                 }
@@ -210,13 +223,11 @@ namespace JPOGRaptor.src
         // Checks the for players in the pounce hitbox
         public void CheckRaptorPounceHitBoxes()
         {
-            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: PounceAttackClientRPC");
-
             int playerLayer = 1 << 3; // This can be found from the game's Asset Ripper output in Unity
 
             Collider[] hitColliders = Physics.OverlapBox(
-                jPOGRaptorAI.attackArea.position,
-                jPOGRaptorAI.attackArea.localScale,
+                jpogRaptorAI.attackArea.position,
+                jpogRaptorAI.attackArea.localScale,
                 Quaternion.identity, playerLayer
                 );
 
@@ -224,19 +235,21 @@ namespace JPOGRaptor.src
             {
                 foreach (var player in hitColliders)
                 {
-                    PlayerControllerB playerControllerB = jPOGRaptorAI.MeetsStandardPlayerCollisionConditions(player);
+                    PlayerControllerB playerControllerB = jpogRaptorAI.MeetsStandardPlayerCollisionConditions(player);
                     if (playerControllerB != null)
                     {
-                        //int chosenDeathAnimation = (UnityEngine.Random.value < 0.9f) ? 9 : 0;
-                        if (jPOGRaptorAI.CarryingKilledPlayerBody == null)
+                        int chosenDeathAnimation = (UnityEngine.Random.value < 0.9f) ? 0 : 9;
+                        if (jpogRaptorAI.CarryingKilledPlayerBody == null)
                         {
                             int playerId = (int)playerControllerB.playerClientId;
                             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Hit player [{playerId}]");
-                            playerControllerB.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Mauling, 9);
-                            jPOGRaptorAI.TakeBodyInMouthServerRpc(playerId);
+                            //jpogRaptorAI.SpawnPlayerBloodOnClientRpc(playerControllerB.NetworkObjectId, Vector3.zero);
+                            playerControllerB.KillPlayer(Vector3.zero, spawnBody: true, CauseOfDeath.Mauling, chosenDeathAnimation);
+                            jpogRaptorAI.TakeBodyInMouthServerRpc(playerId);
                         }
                         else
                         {
+                            //jpogRaptorAI.SpawnPlayerBloodOnClientRpc(playerControllerB.NetworkObjectId, Vector3.zero);
                             playerControllerB.DamagePlayer(40);
                         }
                     }

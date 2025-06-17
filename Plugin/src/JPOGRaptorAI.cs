@@ -36,6 +36,8 @@ namespace JPOGRaptor {
         private bool isClimbing;
         private bool isWalking;
         private bool isRunning;
+        public NetworkVariable<float> CurrentSpeed = new(writePerm: NetworkVariableWritePermission.Owner);
+
 
         public RoundManager roundManager { get; private set; }  = null!;
         //public StartOfRound startOfRound { get; private set; } = null!;
@@ -45,13 +47,15 @@ namespace JPOGRaptor {
         public Vector3 pounceDirection { get; private set; }
         public Vector3 TargetPlayerlastPosition { get; private set; }
         public Vector3 TargetPlayerVelocity { get; private set; }
+        public string itemNameToDrop { get; private set; } = "Fancy lamp";
+        public int numberOfItemsToDrop { get; private set; } = 1;
+
         public readonly float pouncePredictionTime = 1.5f;
         private bool respondingToHelpCall = false;
         private float lastHeardCallDistanceWhenHeard;
 
         private Vector3 noisePositionGuess;
         private float noiseApproximation = 14f;
-        private float previousAgentSpeed;
         private bool wasOnOffMeshLink;
 
         public enum State {
@@ -72,7 +76,7 @@ namespace JPOGRaptor {
             assignImportantValues();
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
-            creatureAnimator.SetTrigger("startWalk");
+            //creatureAnimator.SetTrigger("startWalk");
             // NOTE: Add your behavior states in your enemy script in Unity, where you can configure fun stuff
             // like a voice clip or an sfx clip to play when changing to that specific behavior state.
             currentBehaviourStateIndex = (int)State.SearchingForPlayer;
@@ -101,13 +105,20 @@ namespace JPOGRaptor {
                     creatureVoice.Stop();
                     creatureVoice.PlayOneShot(dieSFX);
                     DoAnimationClientRpc("stopBreath");
+                    // TODO make the raptor drop a custom scrap item.
+/*                    if (IsServer) {
+                        DropLoot();
+                    }*/
                 }
                 return;
             }
             var state = currentBehaviourStateIndex;
             CheckIfClimbing();
-            float speed = agent.velocity.magnitude;
-            SetWalkingAnimation(agent.speed);
+            if (IsOwner && !raptorPounceHelper.IsPouncing && !isClimbing)
+            {
+                CurrentSpeed.Value = agent.velocity.magnitude;
+            }
+            creatureAnimator.SetFloat("moveSpeed", CurrentSpeed.Value);
 
             if (targetPlayer != null && (state != (int)State.SearchingForPlayer))
             {
@@ -128,6 +139,50 @@ namespace JPOGRaptor {
             }
         }
 
+        private void DropLoot()
+        {
+            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Dropping loot.");
+
+            Item? itemToSpawn = null;
+            foreach (Item item in StartOfRound.Instance.allItemsList.itemsList)
+            {
+                if (item.itemName == itemNameToDrop)
+                {
+                    itemToSpawn = item;
+                    break;
+                }
+            }
+
+            if (itemToSpawn == null)
+            {
+                Plugin.Logger.LogError($"JPOGRaptor[{raptorId}]: Item to drop '{itemNameToDrop}' not found in allItemsList!");
+                return;
+            }
+
+            for( int i = 0; i < numberOfItemsToDrop; i++)
+            {
+                Vector3 dropPosition = transform.position + UnityEngine.Random.insideUnitSphere * 1f;
+                dropPosition.y = transform.position.y + 0.5f;
+
+                GameObject? droppedScrap = Instantiate(itemToSpawn.spawnPrefab, dropPosition, Quaternion.identity);
+                if (droppedScrap.TryGetComponent(out GrabbableObject grabbableObject))
+                {
+                    grabbableObject.fallTime = 0.5f;
+                    grabbableObject.NetworkObject.Spawn(destroyWithScene: true);
+                    int scrapValue = UnityEngine.Random.Range(20, 100);
+                    grabbableObject.scrapValue = scrapValue;
+                    Plugin.Logger.LogInfo($"JPOGRaptor[{raptorId}]: Dropped '{itemToSpawn.name}' with NetworkObjectId: {grabbableObject.NetworkObjectId}");
+                    Plugin.Logger.LogInfo($"JPOGRaptor[{raptorId}]: Set scrapValue to: {grabbableObject.scrapValue}");
+                }
+                else
+                {
+                    Plugin.Logger.LogWarning($"JPOGRaptor[{raptorId}]: Spawned item '{itemToSpawn.name}' does not have a GrabbableObject component!");
+                    return;
+                }
+            }
+            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Successfully dropped {numberOfItemsToDrop} of '{itemToSpawn.itemName}'.");
+        }
+
         public override void DoAIInterval() {
 
             base.DoAIInterval();
@@ -142,7 +197,6 @@ namespace JPOGRaptor {
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Entered Searching for player");
                         StateSwitchHelper(State.SearchingForPlayer);
                         respondingToHelpCall = false;
-                        //Reset Target Player
                         targetPlayer = null;
                         StartSearch(transform.position);
                     }
@@ -273,11 +327,13 @@ namespace JPOGRaptor {
                         if (targetPlayer != null)
                         {
                             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Pounce Completed. Target player != null, continue chasing player");
+                            agent.speed = 8f;
                             SwitchToBehaviourClientRpc((int)State.ChasingPlayer);
                         }
                         else
                         {
                             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Pounce Completed. default, return to searching for player");
+                            agent.speed = 5f;
                             SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
                         }
                         break;
@@ -323,7 +379,7 @@ namespace JPOGRaptor {
 
         private void SeMovementSpeedPerSate(State state)
         {
-            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Adjusting speed and walking animation for state [{state}]");
+            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Adjusting speed for state [{state}]");
             switch (state)
             {
 
@@ -345,37 +401,6 @@ namespace JPOGRaptor {
             }
         }
 
-        private void SetWalkingAnimation(float agentSpeed)
-        {
-            if (currentBehaviourStateIndex == (int)State.AttackingPlayer) {
-                return;            
-            }
-
-            if (Mathf.Abs(previousAgentSpeed - agentSpeed) > 0.3f)
-            {
-                previousAgentSpeed = agentSpeed;
-                if (agentSpeed == 0)
-                {
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Stopped Moving T-Pose animation");
-                    isWalking = false;
-                    isRunning = false;
-                    DoAnimationClientRpc("stopMove");
-                }
-                else if (agentSpeed > 0 && agentSpeed <= 5)
-                {
-                    isWalking = true;
-                    isRunning = false;
-                    DoAnimationClientRpc("startWalk");
-                }
-                else if (agentSpeed > 5)
-                {
-                    isWalking = false;
-                    isRunning = true;
-                    DoAnimationClientRpc("startRun");
-                }
-            }
-        }
-
         public override void OnCollideWithPlayer(Collider other) {
             if (timeSinceHittingLocalPlayer < 1f || inCallAnimation || inPounceAttack)
             {
@@ -389,6 +414,7 @@ namespace JPOGRaptor {
                 LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Collision with Player!");
                 timeSinceHittingLocalPlayer = 0f;
                 playerControllerB.DamagePlayer(30);
+                SpawnPlayerBloodOnClientRpc(playerControllerB.NetworkObjectId, Vector3.zero);
             }
         }
 
@@ -493,7 +519,7 @@ namespace JPOGRaptor {
                 // Just started climbing
                 wasOnOffMeshLink = true;
                 isClimbing = true;
-                creatureAnimator.SetBool("isClimbing", isClimbing);
+                SetAnimationBoolClientRPC("isClimbing", isClimbing);
                 LogIfDebugBuild($"Raptor[{raptorId}]: Started climbing.");
             }
             else if (!agent.isOnOffMeshLink && wasOnOffMeshLink)
@@ -501,26 +527,10 @@ namespace JPOGRaptor {
                 // Just finished climbing
                 wasOnOffMeshLink = false;
                 isClimbing = false;
-                creatureAnimator.SetBool("isClimbing", isClimbing);
+                SetAnimationBoolClientRPC("isClimbing", isClimbing);
                 LogIfDebugBuild($"Raptor[{raptorId}]: Finished climbing.");
-                if(isRunning)
-                {
-                    agent.speed = 8;
-                    DoAnimationClientRpc("startRun");
-                }
-                else if (isWalking)
-                {
-                    agent.speed = 3;
-                    DoAnimationClientRpc("startWalk");
-                }
-                else
-                {
-                    agent.speed = 0;
-                    DoAnimationClientRpc("startWalk");
-                }
                 LogIfDebugBuild($"Raptor[{raptorId}]: After CheckIfClimbing: speed=[{agent.speed}], isRunning=[{isRunning}], isWalking=[{isWalking}]");
             }
-
         }
 
         [ClientRpc]
@@ -530,10 +540,16 @@ namespace JPOGRaptor {
         }
 
         [ClientRpc]
-        public void SetAnimationWalkingSpeedRPC(float speed)
+        public void SetAnimationWalkingSpeedClientRPC()
         {
-            LogIfDebugBuild($"JPOGRaptor[{raptorId}]: setting blend tree moving speed to = [{speed}]");
+            float speed = agent.velocity.magnitude;
+            //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: setting blend tree moving speed to = [{speed}]");
             creatureAnimator.SetFloat("moveSpeed", speed, 0.1f, Time.deltaTime);
+        }
+        [ClientRpc]
+        public void SetAnimationBoolClientRPC(string trigger, bool value)
+        {
+            creatureAnimator.SetBool(trigger, value);
         }
 
         [ServerRpc]
@@ -627,6 +643,28 @@ namespace JPOGRaptor {
         public void CheckRaptorPounceHitBoxesClientRPC()
         {
             raptorPounceHelper.CheckRaptorPounceHitBoxes();
+        }
+        [ClientRpc]
+        public void SpawnPlayerBloodOnClientRpc(ulong playerNetworkObjectId, Vector3 bloodDirection)
+        {
+            // This ClientRpc will execute on all clients.
+            // Each client will try to find the player by its NetworkObjectId.
+            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(playerNetworkObjectId, out NetworkObject networkObject))
+            {
+                Plugin.Logger.LogWarning($"JPOGRaptor[{raptorId}]: Could not find networked player object with ID {playerNetworkObjectId} to spawn blood.");
+                return;
+            }
+
+            if (networkObject.TryGetComponent(out PlayerControllerB player))
+            {
+                // Call the player's native DropBlood method
+                player.DropBlood(bloodDirection, leaveBlood: true, leaveFootprint: false);
+                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Triggered DropBlood for player {player.playerUsername} at {player.transform.position}.");
+            }
+            else
+            {
+                Plugin.Logger.LogWarning($"JPOGRaptor[{raptorId}]: Found NetworkObject with ID {playerNetworkObjectId} but no PlayerControllerB component for blood.");
+            }
         }
     }
 }

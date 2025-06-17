@@ -1,19 +1,21 @@
 ## 1.0.2
 A lot of minor fixes
 - General:
-    - Added more layers to the navMesh of the Raptor.
+    - Added more layers to the Raptor's NavMesh.
         - It should now be able to reach more places.
-    - The Raptor should no longer play the hit sound effect once its dead and gets hit.
+    - The Raptor should no longer play the hit sound effect once it's dead and gets hit.
 - Chasing:
-    - No longer attempt to reach/chase players inside the ship if it is not in the ship itself.
+    - No longer attempts to reach/chase players inside the ship if it is not in the ship itself.
     - Now retargets players if it gets hit.
-    - Added a time-out for the raptor if chasing a player too long that is unreachable.
+    - Added a timeout for the Raptor if chasing a player that is unreachable for too long.
 - Pounce:
-    - The Raptor should now check if it has a clear path before attempting to pounce on the player
-    - improved pounce animation.
+    - The Raptor should now check for a clear path before attempting to pounce on the player.
+    - Improved pounce animation.
 - Animation:
-    - Added an animation for when the raptor is climbing.
-        - The currenct animation is actually a grapple aniamtion but it works OK for now.    
+    - Changed walking animation to a blend tree.
+        - Walking and running transitions should now look much smoother.
+    - Added an animation for when the Raptor is climbing.
+        - The current animation is actually a grapple animation, but it works okay for now.
 
 ## 1.0.1
 Small fix.
