@@ -31,7 +31,6 @@ namespace JPOGRaptor {
         float timeSinceHittingLocalPlayer;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
-        private bool inPounceAttack = false;
         public int raptorId { get; private set; }
         private bool isClimbing;
         public NetworkVariable<float> CurrentSpeed = new(writePerm: NetworkVariableWritePermission.Owner);
@@ -187,7 +186,7 @@ namespace JPOGRaptor {
             if (isEnemyDead || StartOfRound.Instance.allPlayersDead) {
                 return;
             };
-
+            raptorTargetingHelper.HandleTargetUnreachability();
             switch (currentBehaviourStateIndex) {
                 case (int)State.SearchingForPlayer:
                     if (previousBehaviourStateIndex != (int)State.SearchingForPlayer)
@@ -400,7 +399,7 @@ namespace JPOGRaptor {
         }
 
         public override void OnCollideWithPlayer(Collider other) {
-            if (timeSinceHittingLocalPlayer < 1f || inCallAnimation || inPounceAttack)
+            if (timeSinceHittingLocalPlayer < 1.5f || inCallAnimation || raptorPounceHelper.IsPouncing)
             {
                 LogIfDebugBuild("JPOGRaptor Collision but last time since hitting is too short or in a calling animation. CANT DO DMG");
                 return;
@@ -561,11 +560,6 @@ namespace JPOGRaptor {
         public void CheckIfPlayersAreInPounceAreaClientRPC()
         {
             raptorPounceHelper.CheckIfPlayersAreInRangeForPounceAttack();
-        }
-
-        public void SetInCall()
-        {
-            inCallAnimation = false;
         }
 
         public void PlayBarkClip(AudioClip audioClip)
