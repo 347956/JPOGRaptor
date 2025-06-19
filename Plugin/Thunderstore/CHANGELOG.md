@@ -1,3 +1,9 @@
+## 1.0.3
+Two minor fixes
+- Small fix for the raptors targetting when its target player becomes untargetable.
+    - It should now try to switch to another valid target.
+- Fixed the raptor not being able to bite after a pounce attack
+
 ## 1.0.2
 A lot of minor fixes
 - General:

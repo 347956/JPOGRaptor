@@ -63,13 +63,13 @@ namespace JPOGRaptor.src
 
                 bestTarget = player;
                 closestDist = dist;
-                LogIfDebugBuild($"Raptor[{raptorId}]: Candidate {player.playerUsername}, dist={dist}, reachable={true}, hasLOS={true}");
+                //LogIfDebugBuild($"Raptor[{raptorId}]: Candidate {player.playerUsername}, dist={dist}, reachable={true}, hasLOS={true}");
             }
             jPOGRaptorAI.targetPlayer = bestTarget;
             if (bestTarget != null)
             {
                 jPOGRaptorAI.targetPlayer = bestTarget;
-                LogIfDebugBuild($"Raptor[{raptorId}]: Found Closest Target Player!");
+                //LogIfDebugBuild($"Raptor[{raptorId}]: Found Closest Target Player!");
             }
 
             return bestTarget != null;
@@ -207,6 +207,51 @@ namespace JPOGRaptor.src
                 else if (jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.ChasingPlayer)
                 {
                     // Already chasing: immediately update path to new target
+                    jPOGRaptorAI.SetDestinationToPosition(jPOGRaptorAI.targetPlayer.transform.position);
+                }
+            }
+        }
+
+        public void HandleTargetUnreachability()
+        {
+            // Only perform this check if we currently have a target and are chasing
+            if (jPOGRaptorAI.targetPlayer == null || jPOGRaptorAI.currentBehaviourStateIndex != (int)JPOGRaptorAI.State.ChasingPlayer)
+            {
+                return;
+            }
+
+            // Check if the current target is now unreachable
+            bool targetIsUnreachable = IsTargetTooFar() ||
+                                       !jPOGRaptorAI.targetPlayer.isPlayerControlled || // Target died or disconnected
+                                       !CheckIfTargetCanBeReachedInsideShip(jPOGRaptorAI.targetPlayer);
+
+            // If the target is unreachable, try to find a new one
+            if (targetIsUnreachable)
+            {
+                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Current target {jPOGRaptorAI.targetPlayer.playerUsername} is unreachable. Attempting to retarget.");
+
+                PlayerControllerB originalTarget = jPOGRaptorAI.targetPlayer; // Keep reference to original for logging
+                jPOGRaptorAI.targetPlayer = null; // Clear current target to force a new search
+
+                // First, try to find a new player with line of sight (more realistic chase)
+                TargetClosestPlayer(true);
+
+                if (jPOGRaptorAI.targetPlayer == null)
+                {
+                    // If no LOS target, try to find any player within sensing distance
+                    TargetClosestPlayer(false);
+                }
+
+                if (jPOGRaptorAI.targetPlayer == null)
+                {
+                    // If still no target, switch to searching state
+                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: No new target found. Switching to SearchingForPlayer state.");
+                    jPOGRaptorAI.SwitchToBehaviourServerRpc((int)JPOGRaptorAI.State.SearchingForPlayer);
+                }
+                else
+                {
+                    // Successfully found a new target
+                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Retargeted from {originalTarget.playerUsername} to {jPOGRaptorAI.targetPlayer.playerUsername}.");
                     jPOGRaptorAI.SetDestinationToPosition(jPOGRaptorAI.targetPlayer.transform.position);
                 }
             }
