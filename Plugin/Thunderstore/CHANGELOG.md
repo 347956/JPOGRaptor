@@ -1,3 +1,6 @@
+## 1.0.4
+Fixed the raptor doing too much damage to other enemies.
+
 ## 1.0.3
 Two minor fixes
 - Small fix for the raptors targetting when its target player becomes untargetable.

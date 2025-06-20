@@ -29,6 +29,7 @@ namespace JPOGRaptor {
         public DeadBodyInfo? CarryingKilledPlayerBody { get; private set; } = null;
 #pragma warning restore 0649
         float timeSinceHittingLocalPlayer;
+        float timeSinceHittingOtherEnemy;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
         public int raptorId { get; private set; }
@@ -73,6 +74,7 @@ namespace JPOGRaptor {
             assignImportantValues();
             LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
+            timeSinceHittingOtherEnemy = 0;
             //creatureAnimator.SetTrigger("startWalk");
             // NOTE: Add your behavior states in your enemy script in Unity, where you can configure fun stuff
             // like a voice clip or an sfx clip to play when changing to that specific behavior state.
@@ -128,6 +130,7 @@ namespace JPOGRaptor {
                 agent.speed = 0f;
             }
             timeSinceHittingLocalPlayer += Time.deltaTime;
+            timeSinceHittingOtherEnemy += Time.deltaTime;
             raptorPounceHelper.UpdateTimeSincePounceAttack();
             // For debugging: logs if the raptors speed gets stuck at 0 despite having a target
             if (agent.speed < 0.1f && targetPlayer != null && currentBehaviourStateIndex != (int)State.AttackingPlayer)
@@ -417,6 +420,7 @@ namespace JPOGRaptor {
 
         public override void OnCollideWithEnemy(Collider other, EnemyAI? collidedEnemy = null)
         {
+            if (timeSinceHittingOtherEnemy < 5f) return;
             if (collidedEnemy == null || collidedEnemy is JPOGRaptorAI || isEnemyDead || collidedEnemy.isEnemyDead || !collidedEnemy.enemyType.canDie)
             {
                 return; //Don't damage other raptors or when dead or to invalid enemies
@@ -425,6 +429,7 @@ namespace JPOGRaptor {
             base.OnCollideWithEnemy(other, collidedEnemy);
             DoAnimationClientRpc("biteAttack");
             collidedEnemy.HitEnemy(3, null, true);
+            timeSinceHittingOtherEnemy = 0f;
         }
 
         public override void HitEnemy(int force = 1, PlayerControllerB? playerWhoHit = null, bool playHitSFX = false, int hitID = -1) {
