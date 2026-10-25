@@ -12,7 +12,7 @@ namespace JPOGRaptor.src
         private readonly JPOGRaptorAI jPOGRaptorAI = jPOGRaptorAI;
         private readonly int raptorId = jPOGRaptorAI.RaptorId;
         // A player this close is always targeted, even in a group or out of sight
-        private const float SenseRange = 5f;
+        public const float SenseRange = 5f;
         // A player in view within this distance is targeted when alone
         private const float SpotRange = 40f;
         // Another living player within this distance of a player means that player is not alone
@@ -172,6 +172,21 @@ namespace JPOGRaptor.src
         /// </summary>
         public bool CheckTargetPathReachability(PlayerControllerB playerToCheck)
         {
+            return GetReachability(playerToCheck) == Reachability.Reachable;
+        }
+
+        public enum Reachability
+        {
+            Reachable,
+            NoPath,
+            ShipDoorClosed
+        }
+
+        /// <summary>
+        /// Same check as CheckTargetPathReachability, but tells which part failed.
+        /// </summary>
+        public Reachability GetReachability(PlayerControllerB playerToCheck)
+        {
 
             NavMeshPath testPath = new();
             bool pathExists = NavMesh.CalculatePath(
@@ -186,7 +201,8 @@ namespace JPOGRaptor.src
             // Ship door status
             bool reachableByDoors = CheckIfTargetCanBeReachedInsideShip(playerToCheck);
 
-            return pathComplete && reachableByDoors;
+            if (!pathComplete) return Reachability.NoPath;
+            return reachableByDoors ? Reachability.Reachable : Reachability.ShipDoorClosed;
         }
 
         public void UpdatePathTimeout(PlayerControllerB player)

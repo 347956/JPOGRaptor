@@ -25,6 +25,7 @@ namespace JPOGRaptor {
         public DeadBodyInfo? CarryingKilledPlayerBody { get; private set; } = null;
 #pragma warning restore 0649
         float timeSinceHittingLocalPlayer;
+        float lastBlockedCollisionLogTime = float.NegativeInfinity;
         float timeSinceHittingOtherEnemy;
         bool isDeadAnimationDone;
         private bool inCallAnimation = false;
@@ -34,6 +35,8 @@ namespace JPOGRaptor {
         public AudioClip FootstepClip1 = null!;
         public AudioClip FootstepClip2 = null!;
         private bool isNextStepClip1 = true;
+        // Hidden because Unity's NetworkBehaviourEditor throws while drawing it, which cuts off the rest of the inspector
+        [HideInInspector]
         public NetworkVariable<float> CurrentSpeed = new(
             0f,
             NetworkVariableReadPermission.Everyone,
@@ -49,11 +52,12 @@ namespace JPOGRaptor {
         public string ItemNameToDrop { get; private set; } = "Fancy lamp";
         public int NumberOfItemsToDrop { get; private set; } = 1;
 
+        private const float MinTurnDistance = 1.2f; // closer than this (horizontally) the raptor keeps its facing
         private bool respondingToHelpCall = false;
         private const float HelpCallRadius = 70f; // only raptors this close to the caller answer a help call
 
-        // Stalking: beyond StalkChargeRange the raptor sneaks between cover points that no player can see, and flees
-        // (without a help call) when a player within StalkSeenRange has it in view. Inside StalkChargeRange it stops
+        // Stalking: beyond StalkChargeRange the raptor sneaks between cover points that no player can see, and hides
+        // (without a help call) when a player within StalkSeenRange has it in view for StalkSpottedGraceTime. Inside StalkChargeRange it stops
         // hiding and charges at the target. Stalking turns into a chase when it takes longer than StalkTimeout.
         private const float StalkChargeRange = 20f;
         private const float StalkSeenRange = 40f;
@@ -66,10 +70,30 @@ namespace JPOGRaptor {
         private bool hasCoverPoint;
         private Vector3 coverPoint;
         private float nextCoverSearchTime;
-        // Set before switching to Fleeing when the flee should not call for help (spotted while stalking)
-        private bool fleeSilently;
-        // The flee that is currently running was started without a help call
-        private bool fleeIsSilent;
+        // A player has to see the raptor for this long (seconds, decays while unseen) before the stalk turns into hiding
+        private const float StalkSpottedGraceTime = 2f;
+        private float stalkSeenTime;
+        // The stalk is only given up after the target has been unreachable for this long (seconds, decays while reachable)
+        private const float StalkUnreachableGraceTime = 2f;
+        private float stalkUnreachableTime;
+        private bool loggedSeenWhileSpotting;
+        private float lastStalkTick;
+
+        // Hiding after being spotted while stalking: no help call, run to a node no player can see and wait there
+        // until the raptor has been out of sight for HideHiddenTime, then start searching again.
+        private const float HideNodeSearchRadius = 40f;
+        private const float HideMinTime = 3f;
+        private const float HideHiddenTime = 1f;
+        private const float HideTimeout = 12f;
+        private const float HideFallbackDistance = 25f; // used when no hidden node is found
+        private const float HideSearchInterval = 1f;
+        private float hideStartTime;
+        private float lastHideTick;
+        private float hiddenTime;
+        private float nextHideSearchTime;
+        private bool hasHidePoint;
+        private Vector3 hidePoint;
+        private Vector3 hideStartPosition;
 
         // Fleeing after a missed pounce: run to the nearest other raptor and chase again once within FleeRaptorRadius.
         // Without another raptor, run FleeAwayDistance away from the target and stop chasing, unless the player keeps
@@ -102,7 +126,8 @@ namespace JPOGRaptor {
             ChasingPlayer,
             RespondingToCall,
             AttackingPlayer,
-            FleeingFromPlayer
+            FleeingFromPlayer,
+            HidingFromPlayer
         }
 
         [Conditional("DEBUG")]
@@ -191,10 +216,17 @@ namespace JPOGRaptor {
             }
             creatureAnimator.SetFloat("moveSpeed", CurrentSpeed.Value);
 
-            if (targetPlayer != null && state != (int)State.SearchingForPlayer && state != (int)State.FleeingFromPlayer)
+            if (targetPlayer != null && state != (int)State.SearchingForPlayer && state != (int)State.FleeingFromPlayer
+                && state != (int)State.HidingFromPlayer)
             {
-                turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
-                transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.Euler(new Vector3(0f, turnCompass.eulerAngles.y, 0f)), 4f * Time.deltaTime);
+                // Standing on or inside the target makes the horizontal direction flip every frame, which spins the raptor
+                Vector3 horizontalToTarget = targetPlayer.transform.position - transform.position;
+                horizontalToTarget.y = 0f;
+                if (horizontalToTarget.sqrMagnitude >= MinTurnDistance * MinTurnDistance)
+                {
+                    turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
+                    transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.Euler(new Vector3(0f, turnCompass.eulerAngles.y, 0f)), 4f * Time.deltaTime);
+                }
             }
             raptorPounceHelper.MoveRaptorDuringPounce(targetPlayer);
             if (stunNormalizedTimer > 0f)
@@ -295,7 +327,20 @@ namespace JPOGRaptor {
                                 }
                                 break;
                             case RaptorTargetingHelper.AcquireResult.Spotted:
-                                LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Spotted a lone player");
+                                // Stalking from view is pointless: keep searching until no player has the raptor in sight
+                                if (raptorTargetingHelper.IsSeenByAnyPlayer(StalkSeenRange))
+                                {
+                                    // Logged once per time the raptor gets seen, not on every interval
+                                    if (!loggedSeenWhileSpotting)
+                                    {
+                                        loggedSeenWhileSpotting = true;
+                                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Spotted a lone player at {Vector3.Distance(transform.position, targetPlayer!.transform.position):F1} m, but is seen by a player, not stalking");
+                                    }
+                                    targetPlayer = null;
+                                    break;
+                                }
+                                loggedSeenWhileSpotting = false;
+                                LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Spotted a lone player at {Vector3.Distance(transform.position, targetPlayer!.transform.position):F1} m");
                                 StopSearch(currentSearch);
                                 SwitchToBehaviourClientRpc((int)State.StalkingPlayer);
                                 break;
@@ -312,13 +357,28 @@ namespace JPOGRaptor {
                         stalkStartTime = Time.time;
                         hasCoverPoint = false;
                         nextCoverSearchTime = 0f;
+                        stalkSeenTime = 0f;
+                        stalkUnreachableTime = 0f;
+                        lastStalkTick = Time.time;
+                    }
+                    float stalkDelta = Mathf.Min(Time.time - lastStalkTick, 1f);
+                    lastStalkTick = Time.time;
+
+                    // Target gone or dead
+                    if (targetPlayer == null || !PlayerIsTargetable(targetPlayer, false, false))
+                    {
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > target lost ({(targetPlayer == null ? "no target" : "not targetable")}), switching to SearchingForPlayer");
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                        break;
                     }
 
-                    // Target gone, dead or no longer reachable
-                    if (targetPlayer == null || !PlayerIsTargetable(targetPlayer, false, false)
-                        || !raptorTargetingHelper.CheckTargetPathReachability(targetPlayer))
+                    // The path and ship door check can flicker (jumping, stepping in and out of the ship), so the target
+                    // has to stay unreachable for StalkUnreachableGraceTime before the stalk is given up
+                    RaptorTargetingHelper.Reachability reachability = raptorTargetingHelper.GetReachability(targetPlayer);
+                    stalkUnreachableTime = RaptorRules.UpdateTimer(stalkUnreachableTime, reachability != RaptorTargetingHelper.Reachability.Reachable, stalkDelta);
+                    if (stalkUnreachableTime > StalkUnreachableGraceTime)
                     {
-                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > target lost, switching to SearchingForPlayer");
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > target unreachable ({reachability}), switching to SearchingForPlayer");
                         SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
                         break;
                     }
@@ -334,6 +394,7 @@ namespace JPOGRaptor {
                     {
                         LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > target is no longer alone, calling for help and chasing");
                         CallForHelp();
+                        StartCoroutine(PlayBark(true)); // the caller does the long bark, responders the short one
                         SwitchToBehaviourClientRpc((int)State.ChasingPlayer);
                         break;
                     }
@@ -361,12 +422,12 @@ namespace JPOGRaptor {
                         break;
                     }
 
-                    // Spotted while sneaking in: flee without calling for help (a possible pounce was tried above)
-                    if (raptorTargetingHelper.IsSeenByAnyPlayer(StalkSeenRange))
+                    // Seen for longer than the grace time while sneaking in: hide without calling for help (a possible pounce was tried above)
+                    stalkSeenTime = RaptorRules.UpdateTimer(stalkSeenTime, raptorTargetingHelper.IsSeenByAnyPlayer(StalkSeenRange), stalkDelta);
+                    if (stalkSeenTime > StalkSpottedGraceTime)
                     {
-                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > spotted by a player, fleeing");
-                        fleeSilently = true;
-                        SwitchToBehaviourClientRpc((int)State.FleeingFromPlayer);
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Stalking > spotted by a player, hiding");
+                        SwitchToBehaviourClientRpc((int)State.HidingFromPlayer);
                         break;
                     }
 
@@ -484,7 +545,8 @@ namespace JPOGRaptor {
                                 break;
                             }
                             LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Pounce missed, fleeing");
-                            fleeSilently = false;
+                            // The entry block sets the speed on the next interval, don't stand still until then
+                            agent.speed = 10f;
                             SwitchToBehaviourClientRpc((int)State.FleeingFromPlayer);
                             break;
                         }
@@ -515,14 +577,8 @@ namespace JPOGRaptor {
                         pursuedTime = 0f;
                         hasFleePoint = false;
                         // Always call, even when no other raptor is alive, so players can't tell whether help is coming
-                        // Being spotted while stalking is the exception: that flee stays quiet
-                        fleeIsSilent = fleeSilently;
-                        fleeSilently = false;
-                        if (!fleeIsSilent)
-                        {
-                            CallForHelp();
-                            StartCoroutine(PlayBark(false));
-                        }
+                        CallForHelp();
+                        StartCoroutine(PlayBark(true)); // the caller does the long bark, responders the short one
                     }
 
                     if (targetPlayer == null || !PlayerIsTargetable(targetPlayer, false, false))
@@ -543,10 +599,8 @@ namespace JPOGRaptor {
                         if (RaptorRules.IsWithinRadius(Vector3.Distance(transform.position, raptorToFleeTo.transform.position), FleeRaptorRadius)
                             || Time.time - fleeStartTime > FleeToRaptorTimeout)
                         {
-                            // After being spotted while stalking the raptor starts over instead of chasing
-                            State nextState = RaptorRules.ChasesAfterFlee(fleeIsSilent) ? State.ChasingPlayer : State.SearchingForPlayer;
-                            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Fleeing > reached another raptor (or timed out), switching to {nextState}");
-                            SwitchToBehaviourClientRpc((int)nextState);
+                            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Fleeing > reached another raptor (or timed out), chasing again");
+                            SwitchToBehaviourClientRpc((int)State.ChasingPlayer);
                             break;
                         }
                         SetDestinationToPosition(raptorToFleeTo.transform.position);
@@ -556,7 +610,7 @@ namespace JPOGRaptor {
                     // No other raptor to run to: run away from the target instead
                     if (!hasFleePoint)
                     {
-                        hasFleePoint = TryFindFleePoint(out fleePoint);
+                        hasFleePoint = TryFindFleePoint(out fleePoint, FleeAwayDistance);
                         if (!hasFleePoint)
                         {
                             LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Fleeing > nowhere to run, chasing again");
@@ -567,7 +621,7 @@ namespace JPOGRaptor {
 
                     // A player that keeps following the raptor gets pounced on, or chased again
                     bool pursued = RaptorRules.IsWithinRadius(Vector3.Distance(transform.position, targetPlayer.transform.position), FleePursuitRadius);
-                    pursuedTime = RaptorRules.UpdatePursuedTime(pursuedTime, pursued, fleeDelta);
+                    pursuedTime = RaptorRules.UpdateTimer(pursuedTime, pursued, fleeDelta);
                     if (pursuedTime > FleePursuitTime)
                     {
                         LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Fleeing > player keeps following, fighting back");
@@ -582,6 +636,74 @@ namespace JPOGRaptor {
                     {
                         LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Fleeing > got away, giving up the chase");
                         SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                    }
+                    break;
+
+                case (int)State.HidingFromPlayer:
+                    if (previousBehaviourStateIndex != (int)State.HidingFromPlayer)
+                    {
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Entered Hiding, {Vector3.Distance(transform.position, targetPlayer.transform.position):F1} m from the target");
+                        hideStartPosition = transform.position;
+                        StateSwitchHelper(State.HidingFromPlayer);
+                        hideStartTime = Time.time;
+                        lastHideTick = Time.time;
+                        hiddenTime = 0f;
+                        nextHideSearchTime = 0f;
+                        hasHidePoint = false;
+                    }
+
+                    if (targetPlayer == null || !PlayerIsTargetable(targetPlayer, false, false))
+                    {
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Hiding > target lost, switching to SearchingForPlayer");
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                        break;
+                    }
+
+                    float hideDelta = Mathf.Min(Time.time - lastHideTick, 1f);
+                    lastHideTick = Time.time;
+                    // Updated every interval while hiding, so it holds the moment the hiding ended
+                    lastFleeTime = Time.time;
+
+                    // A player walking up to the hiding raptor gets pounced on, or chased
+                    if (RaptorRules.IsWithinRadius(Vector3.Distance(transform.position, targetPlayer.transform.position), RaptorTargetingHelper.SenseRange))
+                    {
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Hiding > player too close, attacking");
+                        if (!TryInstantPounce())
+                        {
+                            SwitchToBehaviourClientRpc((int)State.ChasingPlayer);
+                        }
+                        break;
+                    }
+
+                    bool hiddenNow = raptorTargetingHelper.IsHiddenFromAllPlayers(transform.position, StalkSeenRange);
+                    hiddenTime = hiddenNow ? hiddenTime + hideDelta : 0f;
+                    if (RaptorRules.IsHideComplete(Time.time - hideStartTime, hiddenTime, HideMinTime, HideHiddenTime, HideTimeout))
+                    {
+                        LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Hiding > out of sight after {Time.time - hideStartTime:F1} s, moved {Vector3.Distance(transform.position, hideStartPosition):F1} m, switching to SearchingForPlayer");
+                        SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                        break;
+                    }
+
+                    // Pick a new place when there is none, the raptor got there, or a player can see the place now
+                    if (hasHidePoint && !raptorTargetingHelper.IsHiddenFromAllPlayers(hidePoint, StalkSeenRange))
+                    {
+                        hasHidePoint = false;
+                    }
+                    bool hideArrived = hasHidePoint && Vector3.Distance(transform.position, hidePoint) < 2f;
+                    if ((!hasHidePoint || hideArrived) && !hiddenNow && Time.time >= nextHideSearchTime)
+                    {
+                        nextHideSearchTime = Time.time + HideSearchInterval;
+                        bool foundNode = TryPickHidePoint(out hidePoint);
+                        hasHidePoint = foundNode || TryFindFleePoint(out hidePoint, HideFallbackDistance);
+                        if (hasHidePoint)
+                        {
+                            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Hiding > going to {(foundNode ? "hidden node" : "fallback point")} {Vector3.Distance(transform.position, hidePoint):F1} m away");
+                        }
+                        else
+                        {
+                            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Hiding > nowhere to hide, switching to SearchingForPlayer");
+                            SwitchToBehaviourClientRpc((int)State.SearchingForPlayer);
+                        }
                     }
                     break;
 
@@ -608,7 +730,7 @@ namespace JPOGRaptor {
             {
                 return false;
             }
-            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Instant pounce");
+            LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Instant pounce at {Vector3.Distance(transform.position, targetPlayer.transform.position):F1} m");
             StopSearch(currentSearch);
             respondingToHelpCall = false;
             SwitchToBehaviourServerRpc((int)State.AttackingPlayer);
@@ -666,8 +788,40 @@ namespace JPOGRaptor {
             return nearest;
         }
 
-        // Finds a reachable spot about FleeAwayDistance away from the target and sets it as destination
-        private bool TryFindFleePoint(out Vector3 point)
+        // Picks the closest outside AI node that no player can see and that is not closer to the target than the raptor is,
+        // and sets it as destination
+        private bool TryPickHidePoint(out Vector3 point)
+        {
+            Vector3 targetPosition = targetPlayer.transform.position;
+            float currentDistance = Vector3.Distance(transform.position, targetPosition);
+            List<(Vector3 position, float distance)> candidates = [];
+            foreach (GameObject node in allAINodes)
+            {
+                if (node == null) continue;
+                Vector3 position = node.transform.position;
+                float distance = Vector3.Distance(transform.position, position);
+                if (distance > HideNodeSearchRadius) continue;
+                if (Vector3.Distance(position, targetPosition) < currentDistance - 2f) continue;
+                if (!raptorTargetingHelper.IsHiddenFromAllPlayers(position, StalkSeenRange)) continue;
+                candidates.Add((position, distance));
+            }
+            candidates.Sort((a, b) => a.distance.CompareTo(b.distance));
+
+            // Only the best few get the (more expensive) path check
+            for (int i = 0; i < candidates.Count && i < 5; i++)
+            {
+                if (SetDestinationToPosition(candidates[i].position, true))
+                {
+                    point = candidates[i].position;
+                    return true;
+                }
+            }
+            point = default;
+            return false;
+        }
+
+        // Finds a reachable spot about the given distance away from the target and sets it as destination
+        private bool TryFindFleePoint(out Vector3 point, float distanceAway)
         {
             Vector3 away = transform.position - targetPlayer.transform.position;
             away.y = 0f;
@@ -675,9 +829,9 @@ namespace JPOGRaptor {
 
             foreach (float angle in FleeAngles)
             {
-                Vector3 candidate = transform.position + Quaternion.Euler(0f, angle, 0f) * away * FleeAwayDistance;
+                Vector3 candidate = transform.position + Quaternion.Euler(0f, angle, 0f) * away * distanceAway;
                 if (NavMesh.SamplePosition(candidate, out NavMeshHit hit, 15f, agent.areaMask)
-                    && Vector3.Distance(hit.position, transform.position) > FleeAwayDistance * 0.6f
+                    && Vector3.Distance(hit.position, transform.position) > distanceAway * 0.6f
                     && SetDestinationToPosition(hit.position, true))
                 {
                     point = hit.position;
@@ -688,9 +842,10 @@ namespace JPOGRaptor {
             return false;
         }
 
-        IEnumerator PlayBark(bool shortBark)
+        // longBark: the call of the raptor asking for help (barkCall, ~3 s). Otherwise the short bark of a responding raptor (shortBark).
+        IEnumerator PlayBark(bool longBark)
         {
-            if (shortBark)
+            if (longBark)
             {
                 if (respondingToHelpCall)
                 {
@@ -740,19 +895,27 @@ namespace JPOGRaptor {
                 case State.FleeingFromPlayer:
                     agent.speed = 10;
                     break;
+                case State.HidingFromPlayer:
+                    agent.speed = 8;
+                    break;
             }
         }
 
         public override void OnCollideWithPlayer(Collider other) {
             if (timeSinceHittingLocalPlayer < 1.5f || inCallAnimation || raptorPounceHelper.IsPouncing)
             {
-                LogIfDebugBuild("JPOGRaptor Collision but last time since hitting is too short or in a calling animation. CANT DO DMG");
+                // OnTriggerStay calls this every physics step while touching, so log it at most once per second
+                if (Time.time - lastBlockedCollisionLogTime >= 1f)
+                {
+                    lastBlockedCollisionLogTime = Time.time;
+                    LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Collision but can't do damage (since last hit {timeSinceHittingLocalPlayer:F1} s, calling animation {inCallAnimation}, pouncing {raptorPounceHelper.IsPouncing})");
+                }
                 return;
             }
             PlayerControllerB playerControllerB = MeetsStandardPlayerCollisionConditions(other);
             if (playerControllerB != null)
             {
-                LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Collision with Player!");
+                LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Collision with Player! (state {(State)currentBehaviourStateIndex}), requesting the bite animation");
                 timeSinceHittingLocalPlayer = 0f;
                 playerControllerB.DamagePlayer(30);
                 // This runs on the victim's client, which can't invoke ClientRpcs itself

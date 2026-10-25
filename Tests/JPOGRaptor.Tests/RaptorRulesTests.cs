@@ -58,24 +58,38 @@ public class RaptorRulesTests
     }
 
     [Fact]
-    public void ChasesAfterFlee_LoudFleeChases_SilentFleeSearches()
-    {
-        Assert.True(RaptorRules.ChasesAfterFlee(false));
-        Assert.False(RaptorRules.ChasesAfterFlee(true));
-    }
-
-    [Fact]
-    public void PursuedTime_GrowsWhilePlayerIsClose()
+    public void Timer_GrowsWhileActive()
     {
         float t = 0f;
-        for (int i = 0; i < 5; i++) t = RaptorRules.UpdatePursuedTime(t, true, 1f);
+        for (int i = 0; i < 5; i++) t = RaptorRules.UpdateTimer(t, true, 1f);
         Assert.Equal(5f, t);
     }
 
     [Fact]
-    public void PursuedTime_DecaysAndNeverGoesNegative()
+    public void Timer_DecaysAndNeverGoesNegative()
     {
-        Assert.Equal(1f, RaptorRules.UpdatePursuedTime(3f, false, 2f));
-        Assert.Equal(0f, RaptorRules.UpdatePursuedTime(1f, false, 2f));
+        Assert.Equal(1f, RaptorRules.UpdateTimer(3f, false, 2f));
+        Assert.Equal(0f, RaptorRules.UpdateTimer(1f, false, 2f));
+    }
+
+    [Fact]
+    public void Timer_SeenGraceTime_FlickerDoesNotReachTwoSeconds()
+    {
+        // Seen 1 s, unseen 0.6 s, seen 1 s: 1.4 s accumulated, below the 2 s grace time
+        float t = RaptorRules.UpdateTimer(0f, true, 1f);
+        t = RaptorRules.UpdateTimer(t, false, 0.6f);
+        t = RaptorRules.UpdateTimer(t, true, 1f);
+        Assert.True(t < 2f);
+    }
+
+    [Theory]
+    [InlineData(1f, 5f, false)]    // too early, even when hidden
+    [InlineData(3f, 0.5f, false)]  // min time passed but not hidden long enough
+    [InlineData(3f, 1f, true)]
+    [InlineData(5f, 0f, false)]    // still in sight
+    [InlineData(12f, 0f, true)]    // timeout
+    public void IsHideComplete_NeedsMinTimeAndHiddenTimeOrTimeout(float sinceStart, float hidden, bool expected)
+    {
+        Assert.Equal(expected, RaptorRules.IsHideComplete(sinceStart, hidden, 3f, 1f, 12f));
     }
 }

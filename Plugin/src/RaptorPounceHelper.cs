@@ -45,6 +45,19 @@ namespace JPOGRaptor.src
             Plugin.Logger.LogInfo(text);
         }
 
+        // These are checked every AI interval, so log them at most once per LogThrottleSeconds
+        private const float LogThrottleSeconds = 2f;
+        private float lastCooldownLogTime = float.NegativeInfinity;
+        private float lastBlockedLineLogTime = float.NegativeInfinity;
+
+        [Conditional("DEBUG")]
+        private void LogThrottled(ref float lastLogTime, string text)
+        {
+            if (Time.time - lastLogTime < LogThrottleSeconds) return;
+            lastLogTime = Time.time;
+            LogIfDebugBuild(text);
+        }
+
         public void StartPounce()
         {
             if (IsPouncing) return;
@@ -214,7 +227,7 @@ namespace JPOGRaptor.src
                     }
                     else
                     {
-                        LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target player was in pounce range, but pounce is on cooldown");
+                        LogThrottled(ref lastCooldownLogTime, $"JPOGRaptor[{raptorId}]: target player was in pounce range, but pounce is on cooldown");
                     }
                 }
             }
@@ -236,7 +249,7 @@ namespace JPOGRaptor.src
             bool blocked = Physics.Linecast(from, to, out RaycastHit hit, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore);
             if (blocked)
             {
-                LogIfDebugBuild($"Raptor[{raptorId}]: Line to player blocked by [{hit.collider.name}]");
+                LogThrottled(ref lastBlockedLineLogTime, $"Raptor[{raptorId}]: Line to player blocked by [{hit.collider.name}]");
             }
 
             return !blocked;

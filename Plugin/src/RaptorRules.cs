@@ -31,16 +31,19 @@ namespace JPOGRaptor.src
         public static bool IsStalkOnCooldown(float now, float lastFleeTime, float cooldown) => now - lastFleeTime < cooldown;
 
         /// <summary>
-        /// A silent flee (spotted while stalking) restarts from Searching, a loud one (missed pounce) resumes the chase.
+        /// Accumulated time of a condition (player is close, raptor is seen): grows while active, decays while not.
         /// </summary>
-        public static bool ChasesAfterFlee(bool fleeWasSilent) => !fleeWasSilent;
+        public static float UpdateTimer(float timer, bool active, float deltaTime)
+        {
+            return active ? timer + deltaTime : Math.Max(0f, timer - deltaTime);
+        }
 
         /// <summary>
-        /// Time the player has been following a fleeing raptor: grows while the player is close, decays while not.
+        /// Hiding ends after hiddenRequired seconds out of sight once minTime has passed, or at the timeout.
         /// </summary>
-        public static float UpdatePursuedTime(float pursuedTime, bool playerIsClose, float deltaTime)
+        public static bool IsHideComplete(float timeSinceStart, float hiddenTime, float minTime, float hiddenRequired, float timeout)
         {
-            return playerIsClose ? pursuedTime + deltaTime : Math.Max(0f, pursuedTime - deltaTime);
+            return timeSinceStart >= timeout || (timeSinceStart >= minTime && hiddenTime >= hiddenRequired);
         }
     }
 }
