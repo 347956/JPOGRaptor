@@ -1,30 +1,32 @@
 ﻿using GameNetcodeStuff;
-using System;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using UnityEngine;
 using UnityEngine.AI;
 
 namespace JPOGRaptor.src
 {
-    internal class RaptorTargetingHelper
+    public class RaptorTargetingHelper(JPOGRaptorAI jPOGRaptorAI)
     {
 
-        private readonly JPOGRaptorAI jPOGRaptorAI;
-        private readonly int raptorId;
-        public float MaxChaseDistance { get; private set; } = 30f;
+        private readonly JPOGRaptorAI jPOGRaptorAI = jPOGRaptorAI;
+        private readonly int raptorId = jPOGRaptorAI.RaptorId;
+        // A player this close is always targeted, even in a group or out of sight
+        private const float SenseRange = 5f;
+        // A player in view within this distance is targeted when alone
+        private const float SpotRange = 40f;
+        // Another living player within this distance of a player means that player is not alone
+        private const float GroupRadius = 10f;
+        // Must stay above SpotRange, otherwise a spotted player is dropped again as "too far" when the raptor starts chasing
+        public float MaxChaseDistance { get; private set; } = 45f;
+        // How wide a player's view is when checking if the raptor is seen (half angle in degrees)
+        private const float SeenViewAngle = 45f;
         public float TimeWithoutPath { get; private set; } = 0f;
 
         private float lastTimeoutUpdate;
+        private bool lastPathReachable = true;
 
         public float MaxUnreachableTime { get; private set; } = 7f;
-
-        public RaptorTargetingHelper(JPOGRaptorAI jPOGRaptorAI)
-        {
-            this.jPOGRaptorAI = jPOGRaptorAI;
-            this.raptorId = jPOGRaptorAI.raptorId;
-        }
-
 
         [Conditional("DEBUG")]
         void LogIfDebugBuild(string text)
@@ -32,21 +34,93 @@ namespace JPOGRaptor.src
             Plugin.Logger.LogInfo(text);
         }
 
-        public bool FoundClosestPlayerInRange(float range, float senseRange)
+        public enum AcquireResult
         {
-            TargetClosestPlayer(true);
+            None,
+            Spotted,
+            TooClose
+        }
 
-            if (jPOGRaptorAI.targetPlayer == null)
+        /// <summary>
+        /// Picks a target for a searching raptor.
+        /// A player within sense range is always targeted (TooClose), even in a group or without line of sight.
+        /// A player in view within spot range is only targeted when alone (Spotted).
+        /// The current target is left alone when nobody qualifies.
+        /// </summary>
+        public AcquireResult TryAcquireTarget(bool allowSpotting = true)
+        {
+            PlayerControllerB? tooClose = FindClosestPlayer(false, SenseRange);
+            if (tooClose != null)
             {
-                // Couldn't see a player, so we check if a player is in sensing distance instead
-                TargetClosestPlayer(false);
-                range = senseRange;
+                jPOGRaptorAI.targetPlayer = tooClose;
+                return AcquireResult.TooClose;
             }
-            return jPOGRaptorAI.targetPlayer != null && Vector3.Distance(jPOGRaptorAI.transform.position, jPOGRaptorAI.targetPlayer.transform.position) < range;
+
+            if (!allowSpotting) return AcquireResult.None;
+
+            PlayerControllerB? spotted = FindClosestPlayer(true, SpotRange, true);
+            if (spotted != null)
+            {
+                jPOGRaptorAI.targetPlayer = spotted;
+                return AcquireResult.Spotted;
+            }
+            return AcquireResult.None;
+        }
+
+        /// <summary>
+        /// True when no other living player is within GroupRadius of the given player.
+        /// </summary>
+        public bool IsAlone(PlayerControllerB player)
+        {
+            var distances = new List<float>();
+            foreach (var other in StartOfRound.Instance.allPlayerScripts)
+            {
+                if (other == null || other == player) continue;
+                if (!other.isPlayerControlled || other.isPlayerDead) continue;
+                distances.Add(Vector3.Distance(other.transform.position, player.transform.position));
+            }
+            return RaptorRules.IsAlone(distances, GroupRadius);
+        }
+
+        /// <summary>
+        /// True when any living player within range has the raptor in their view (view cone and line of sight).
+        /// </summary>
+        public bool IsSeenByAnyPlayer(float range)
+        {
+            Vector3 eye = jPOGRaptorAI.transform.position + Vector3.up * 1.2f;
+            foreach (var player in StartOfRound.Instance.allPlayerScripts)
+            {
+                if (player == null || !player.isPlayerControlled || player.isPlayerDead) continue;
+                if (player.HasLineOfSightToPosition(eye, SeenViewAngle, (int)range)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// True when no living player within range has a clear line to the point, regardless of where they look.
+        /// </summary>
+        public bool IsHiddenFromAllPlayers(Vector3 point, float range)
+        {
+            Vector3 target = point + Vector3.up * 1.2f;
+            foreach (var player in StartOfRound.Instance.allPlayerScripts)
+            {
+                if (player == null || !player.isPlayerControlled || player.isPlayerDead) continue;
+                if (Vector3.Distance(player.transform.position, point) > range) continue;
+                if (!Physics.Linecast(player.playerEye.position, target, StartOfRound.Instance.collidersRoomDefaultAndFoliage, QueryTriggerInteraction.Ignore)) return false;
+            }
+            return true;
         }
 
         public bool TargetClosestPlayer(bool requireLOS)
         {
+            PlayerControllerB? bestTarget = FindClosestPlayer(requireLOS);
+            jPOGRaptorAI.targetPlayer = bestTarget;
+            return bestTarget != null;
+        }
+
+        private PlayerControllerB? FindClosestPlayer(bool requireLOS, float? maxRange = null, bool requireAlone = false)
+        {
+            float range = maxRange ?? MaxChaseDistance;
             float closestDist = float.MaxValue;
             PlayerControllerB? bestTarget = null;
 
@@ -54,34 +128,34 @@ namespace JPOGRaptor.src
             {
                 if (player == null) continue;
 
+                // Skips dead players, unused player slots and players the outside raptor cannot target (e.g. inside the facility)
+                if (!jPOGRaptorAI.PlayerIsTargetable(player, false, false)) continue;
+
                 float dist = Vector3.Distance(jPOGRaptorAI.transform.position, player.transform.position);
-                if (dist >= closestDist) continue;
+                if (dist >= closestDist || dist > range) continue;
 
                 if(requireLOS && !jPOGRaptorAI.CheckLineOfSightForPosition(player.transform.position)) continue;
-                
-                if(!CheckIfTargetCanBeReachedInsideShip(player) && !CheckTargetPathReachability(player)) continue;
+
+                if (requireAlone && !IsAlone(player)) continue;
+
+                // Includes the ship door check
+                if (!CheckTargetPathReachability(player)) continue;
 
                 bestTarget = player;
                 closestDist = dist;
                 //LogIfDebugBuild($"Raptor[{raptorId}]: Candidate {player.playerUsername}, dist={dist}, reachable={true}, hasLOS={true}");
             }
-            jPOGRaptorAI.targetPlayer = bestTarget;
-            if (bestTarget != null)
-            {
-                jPOGRaptorAI.targetPlayer = bestTarget;
-                //LogIfDebugBuild($"Raptor[{raptorId}]: Found Closest Target Player!");
-            }
-
-            return bestTarget != null;
+            return bestTarget;
         }
         /// <summary>
         /// Combines the path + Ship reachability check with the chase time-out check
         /// If the path is unreachable and the time-out period is reached returns fasle
         /// false = I cannot reach the target and I tried for x amount of time
         /// </summary>
-        public bool CheckIfTargetPlayerIsReachable(PlayerControllerB playerToCheck)
+        public bool CheckIfTargetPlayerIsReachable()
         {
-            bool reachable = CheckTargetPathReachability(playerToCheck);
+            // Uses the result of the latest UpdatePathTimeout call, which must run first, to avoid a second path calculation
+            bool reachable = lastPathReachable;
             bool timeOut = HasTimedOutUnreachable();
             if (!reachable && timeOut)            
             {
@@ -99,7 +173,7 @@ namespace JPOGRaptor.src
         public bool CheckTargetPathReachability(PlayerControllerB playerToCheck)
         {
 
-            NavMeshPath testPath = new NavMeshPath();
+            NavMeshPath testPath = new();
             bool pathExists = NavMesh.CalculatePath(
                 jPOGRaptorAI.agent.transform.position,
                 playerToCheck.transform.position,
@@ -118,6 +192,7 @@ namespace JPOGRaptor.src
         public void UpdatePathTimeout(PlayerControllerB player)
         {
             bool reachable = CheckTargetPathReachability(player);
+            lastPathReachable = reachable;
             if (reachable)
             {
                 TimeWithoutPath = 0f;
@@ -197,10 +272,15 @@ namespace JPOGRaptor.src
         {
             if (jPOGRaptorAI.isEnemyDead) return; // Extra check just in case it gets called after the raptor is dead
 
-            if (playerWhoHit != null) // Extra null check for safety
+            // Don't lock onto an attacker the raptor cannot reach (e.g. a player in the ship behind closed doors)
+            if (playerWhoHit != null && CheckTargetPathReachability(playerWhoHit)) // Extra null check for safety
             {
                 jPOGRaptorAI.targetPlayer = playerWhoHit;
-                if (jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.SearchingForPlayer)
+                // Pounce right away when possible
+                if (jPOGRaptorAI.TryInstantPounce()) return;
+
+                if (jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.SearchingForPlayer
+                    || jPOGRaptorAI.currentBehaviourStateIndex == (int)JPOGRaptorAI.State.StalkingPlayer)
                 {
                     jPOGRaptorAI.SwitchToBehaviourServerRpc((int)JPOGRaptorAI.State.ChasingPlayer);
                 }
@@ -230,30 +310,39 @@ namespace JPOGRaptor.src
             {
                 LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Current target {jPOGRaptorAI.targetPlayer.playerUsername} is unreachable. Attempting to retarget.");
 
-                PlayerControllerB originalTarget = jPOGRaptorAI.targetPlayer; // Keep reference to original for logging
-                jPOGRaptorAI.targetPlayer = null; // Clear current target to force a new search
+                RetargetOrSearch();
+            }
+        }
 
-                // First, try to find a new player with line of sight (more realistic chase)
-                TargetClosestPlayer(true);
+        /// <summary>
+        /// Drops the current target and looks for a new reachable one, first with line of sight, then without.
+        /// Switches to SearchingForPlayer when nobody is found.
+        /// </summary>
+        public void RetargetOrSearch()
+        {
+            PlayerControllerB? originalTarget = jPOGRaptorAI.targetPlayer; // Keep reference to original for logging
+            jPOGRaptorAI.targetPlayer = null; // Clear current target to force a new search
 
-                if (jPOGRaptorAI.targetPlayer == null)
-                {
-                    // If no LOS target, try to find any player within sensing distance
-                    TargetClosestPlayer(false);
-                }
+            // First, try to find a new player with line of sight (more realistic chase)
+            TargetClosestPlayer(true);
 
-                if (jPOGRaptorAI.targetPlayer == null)
-                {
-                    // If still no target, switch to searching state
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: No new target found. Switching to SearchingForPlayer state.");
-                    jPOGRaptorAI.SwitchToBehaviourServerRpc((int)JPOGRaptorAI.State.SearchingForPlayer);
-                }
-                else
-                {
-                    // Successfully found a new target
-                    LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Retargeted from {originalTarget.playerUsername} to {jPOGRaptorAI.targetPlayer.playerUsername}.");
-                    jPOGRaptorAI.SetDestinationToPosition(jPOGRaptorAI.targetPlayer.transform.position);
-                }
+            if (jPOGRaptorAI.targetPlayer == null)
+            {
+                // If no LOS target, try to find any player within sensing distance
+                TargetClosestPlayer(false);
+            }
+
+            if (jPOGRaptorAI.targetPlayer == null)
+            {
+                // If still no target, switch to searching state
+                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: No new target found. Switching to SearchingForPlayer state.");
+                jPOGRaptorAI.SwitchToBehaviourServerRpc((int)JPOGRaptorAI.State.SearchingForPlayer);
+            }
+            else
+            {
+                // Successfully found a new target
+                LogIfDebugBuild($"JPOGRaptor[{raptorId}]: Retargeted from {originalTarget?.playerUsername} to {jPOGRaptorAI.targetPlayer.playerUsername}.");
+                jPOGRaptorAI.SetDestinationToPosition(jPOGRaptorAI.targetPlayer.transform.position);
             }
         }
     }

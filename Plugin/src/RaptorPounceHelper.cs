@@ -2,17 +2,20 @@
 using System.Collections;
 using System.Diagnostics;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace JPOGRaptor.src
 {
-    internal class RaptorPounceHelper
+    public class RaptorPounceHelper(JPOGRaptorAI jPOGRaptorAI)
     {
 
+        public const float PounceRange = 10f;
+
         private Coroutine? pounceCoroutine;
-        private readonly JPOGRaptorAI jpogRaptorAI;
+        private readonly JPOGRaptorAI jpogRaptorAI = jPOGRaptorAI;
         private readonly float totalPounceTime = 4.5f; // safety timeout for pounce
         private readonly float pounceDamagePeriod = 2.5f; // safety timeout for pounce
-        private readonly int raptorId;
+        private readonly int raptorId = jPOGRaptorAI.RaptorId;
 
         private Vector3 pounceDirection;
 
@@ -25,16 +28,16 @@ namespace JPOGRaptor.src
         public float PounceSpeed { get; private set; } = 15;
         public bool InRangeForPounceAttack { get; private set; } = false;
 
+        // Every client only affects its own local player, so one flag per client is enough
+        private bool localPlayerHitThisPounce = false;
+        private int pounceTargetPlayerId = -1;
+        private float hitBoxCheckTimer = 0f;
+        private const float HitBoxCheckInterval = 0.1f;
+
         private Vector3 pounceTargetPlayerVelocity;
         private Vector3 pounceTargetPlayerlastPosition;
+        private PlayerControllerB? velocityTrackedPlayer;
         private readonly float pouncePredictionTime = 1.5f;
-
-
-        public RaptorPounceHelper(JPOGRaptorAI jPOGRaptorAI)
-        {
-            this.jpogRaptorAI = jPOGRaptorAI;
-            this.raptorId = jPOGRaptorAI.raptorId;
-        }
 
         [Conditional("DEBUG")]
         void LogIfDebugBuild(string text)
@@ -45,10 +48,10 @@ namespace JPOGRaptor.src
         public void StartPounce()
         {
             if (IsPouncing) return;
-            pounceCoroutine = jpogRaptorAI.StartCoroutine(pounceRoutine());
+            pounceCoroutine = jpogRaptorAI.StartCoroutine(PounceRoutine());
         }
 
-        private IEnumerator pounceRoutine()
+        private IEnumerator PounceRoutine()
         {
             //jpogRaptorAI.agent.enabled = false; // turn off NavMeshAgent when moving manually
             IsPouncing = true;
@@ -61,7 +64,15 @@ namespace JPOGRaptor.src
             ? jpogRaptorAI.targetPlayer.transform.position + pounceTargetPlayerVelocity * pouncePredictionTime
             : jpogRaptorAI.transform.forward * 5f;
 
-            pounceDirection = (predictedPosition - jpogRaptorAI.transform.position).normalized;
+            // Keep the pounce on the ground plane so the raptor isn't pushed into or above the floor
+            pounceDirection = predictedPosition - jpogRaptorAI.transform.position;
+            pounceDirection.y = 0f;
+            pounceDirection = pounceDirection.normalized;
+
+            // Tell every client who this pounce is aimed at (-1 = nobody)
+            int pounceTargetId = jpogRaptorAI.targetPlayer != null ? (int)jpogRaptorAI.targetPlayer.playerClientId : -1;
+            jpogRaptorAI.BeginPounceClientRpc(pounceTargetId);
+            hitBoxCheckTimer = 0f;
 
             // Play pounce animation on all clients
             jpogRaptorAI.DoAnimationClientRpc("pounceAttack");
@@ -83,6 +94,7 @@ namespace JPOGRaptor.src
             if (jpogRaptorAI.currentBehaviourStateIndex != (int)JPOGRaptorAI.State.AttackingPlayer)
             {
                 LogIfDebugBuild($"Raptor[{raptorId}]: Pounce aborted because state changed");
+                jpogRaptorAI.DropBodyInMouthServerRpc();
                 ResetPounceFlags();
                 yield break;
             }
@@ -129,12 +141,19 @@ namespace JPOGRaptor.src
 
         private void PounceTargetting(PlayerControllerB? targetPlayer)
         {
-            if (targetPlayer == null) return;
-            //Rigidbody rb = targetPlayer.GetComponent<Rigidbody>();
-            //TargetPlayerVelocity = rb.velocity;
+            if (targetPlayer == null || Time.deltaTime <= 0f) return;
+
+            // Restart the tracking when the target changes, otherwise the first velocity sample is huge
+            if (velocityTrackedPlayer != targetPlayer)
+            {
+                velocityTrackedPlayer = targetPlayer;
+                pounceTargetPlayerVelocity = Vector3.zero;
+                pounceTargetPlayerlastPosition = targetPlayer.transform.position;
+                return;
+            }
+
             pounceTargetPlayerVelocity = (targetPlayer.transform.position - pounceTargetPlayerlastPosition) / Time.deltaTime;
             pounceTargetPlayerlastPosition = targetPlayer.transform.position;
-
         }
 
         private void UpdatePounceTimer()
@@ -149,30 +168,44 @@ namespace JPOGRaptor.src
 
         public void MoveRaptorDuringPounce(PlayerControllerB? targetPlayer)
         {
-            if (targetPlayer == null || !IsPouncing) return;
-            jpogRaptorAI.turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
+            if (targetPlayer == null) return;
+            // Track the target's velocity continuously (not only while pouncing) so the prediction at pounce start is valid
             PounceTargetting(targetPlayer);
+            if (!IsPouncing) return;
+            jpogRaptorAI.turnCompass.LookAt(targetPlayer.gameplayCamera.transform.position);
 
             if (PounceAttackDamage)
             {
-                //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: calling pounce RPC");
-                jpogRaptorAI.CheckRaptorPounceHitBoxesClientRPC();
+                hitBoxCheckTimer -= Time.deltaTime;
+                if (hitBoxCheckTimer <= 0f)
+                {
+                    hitBoxCheckTimer = HitBoxCheckInterval;
+                    jpogRaptorAI.CheckRaptorPounceHitBoxesClientRPC();
+                }
             }
             UpdatePounceTimer();
             if (PounceTimer < PounceDuration)
             {
                 //LogIfDebugBuild($"JPOGRaptor[{raptorId}]: pouncing towards target player");
-                jpogRaptorAI.transform.position += pounceDirection * PounceSpeed * Time.deltaTime;
+                // Stop at the navmesh edge so the pounce can't carry the raptor through walls or off the map
+                Vector3 step = pounceDirection * PounceSpeed * Time.deltaTime;
+                Vector3 currentPosition = jpogRaptorAI.transform.position;
+                if (!NavMesh.Raycast(currentPosition, currentPosition + step, out _, jpogRaptorAI.agent.areaMask))
+                {
+                    jpogRaptorAI.transform.position = currentPosition + step;
+                }
             }
         }
 
         // Checks if player are in range for a pounce attack
         public void CheckIfPlayersAreInRangeForPounceAttack()
         {
+            // Re-evaluated on every check so a stale "in range" result can't trigger a pounce from afar
+            InRangeForPounceAttack = false;
             if (jpogRaptorAI.targetPlayer != null)
             {
                 float distance = Vector3.Distance(jpogRaptorAI.transform.position, jpogRaptorAI.targetPlayer.transform.position);
-                if (distance < 10f && HasClearLineToPlayer())
+                if (distance < PounceRange && HasClearLineToPlayer())
                 {
                     if (TimeSincePounceAttack >= 10f)
                     {
@@ -184,10 +217,6 @@ namespace JPOGRaptor.src
                         LogIfDebugBuild($"JPOGRaptor[{raptorId}]: target player was in pounce range, but pounce is on cooldown");
                     }
                 }
-            }
-            else
-            {
-                InRangeForPounceAttack = false;
             }
         }
 
@@ -202,33 +231,35 @@ namespace JPOGRaptor.src
             Vector3 from = jpogRaptorAI.transform.position + Vector3.up * 1f;
             Vector3 to = player.transform.position + Vector3.up * 1f;
 
-            bool blocked = Physics.Linecast(from, to, out RaycastHit hit);
-
+            // Only level geometry blocks the line: the mask excludes the player and enemy layers (so neither the target nor
+            // the raptor's own colliders count) and triggers are ignored
+            bool blocked = Physics.Linecast(from, to, out RaycastHit hit, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore);
             if (blocked)
             {
-                // Prevents the raycast from being blocked by the raptor's own colliders
-                if (hit.collider.transform.IsChildOf(jpogRaptorAI.transform))
-                {
-                    blocked = false;
-                }
-                else
-                {
-                    LogIfDebugBuild($"Raptor[{raptorId}]: Line to player blocked by [{hit.collider.name}]");
-                }
+                LogIfDebugBuild($"Raptor[{raptorId}]: Line to player blocked by [{hit.collider.name}]");
             }
 
             return !blocked;
         }
 
+        // Runs on every client when a pounce starts
+        public void BeginPounce(int targetPlayerId)
+        {
+            pounceTargetPlayerId = targetPlayerId;
+            localPlayerHitThisPounce = false;
+        }
+
         // Checks the for players in the pounce hitbox
         public void CheckRaptorPounceHitBoxes()
         {
+            if (localPlayerHitThisPounce) return;
+
             int playerLayer = 1 << 3; // This can be found from the game's Asset Ripper output in Unity
 
             Collider[] hitColliders = Physics.OverlapBox(
                 jpogRaptorAI.attackArea.position,
                 jpogRaptorAI.attackArea.localScale,
-                Quaternion.identity, playerLayer
+                jpogRaptorAI.attackArea.rotation, playerLayer
                 );
 
             if (hitColliders.Length > 0)
@@ -236,8 +267,10 @@ namespace JPOGRaptor.src
                 foreach (var player in hitColliders)
                 {
                     PlayerControllerB playerControllerB = jpogRaptorAI.MeetsStandardPlayerCollisionConditions(player);
-                    if (playerControllerB != null)
+                    // Only the player this pounce was aimed at can be hit
+                    if (playerControllerB != null && (int)playerControllerB.playerClientId == pounceTargetPlayerId)
                     {
+                        localPlayerHitThisPounce = true;
                         int chosenDeathAnimation = (UnityEngine.Random.value < 0.9f) ? 0 : 9;
                         if (jpogRaptorAI.CarryingKilledPlayerBody == null)
                         {

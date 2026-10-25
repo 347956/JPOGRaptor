@@ -1,3 +1,8 @@
+## 1.0.5
+Updated to v73
+The raptors foot steps might be too quiet, after updating I tried setting the radius higher which helps a bit.
+I might fine tune it in the future. For now, the raptor will just make less waling noise and be more stealthy...
+
 ## 1.0.4
 Fixed the raptor doing too much damage to other enemies.
 
