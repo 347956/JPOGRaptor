@@ -64,7 +64,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   useNumberSpawnedFalloff: 0
-  spawnInGroupsOf: 0
+  spawnInGroupsOf: 2
   requireNestObjectsToSpawn: 0
   enemyPrefab: {fileID: 3796245175031372056, guid: 286a57d25a7eccf4087ec48d50bb5129,
     type: 3}
