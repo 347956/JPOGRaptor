@@ -52,6 +52,8 @@ namespace JPOGRaptor {
         public string ItemNameToDrop { get; private set; } = "Fancy lamp";
         public int NumberOfItemsToDrop { get; private set; } = 1;
 
+        private const int BaseAvoidancePriority = 30;
+        private const int AvoidancePriorityVariants = 40; // priorities 30 to 69, the prefab default is 50
         private const float MinTurnDistance = 1.2f; // closer than this (horizontally) the raptor keeps its facing
         private bool respondingToHelpCall = false;
         private const float HelpCallRadius = 70f; // only raptors this close to the caller answer a help call
@@ -161,6 +163,9 @@ namespace JPOGRaptor {
         {
             AllRaptors.Add(this);
             this.RaptorId = nextRaptorId++;
+            // Agents with the same avoidance priority block each other on narrow paths (like the wooden bridges on March).
+            // A different priority per raptor lets the lower priority one give way, while the higher one walks on.
+            agent.avoidancePriority = BaseAvoidancePriority + RaptorId % AvoidancePriorityVariants;
             // The prefab may not list every state yet, and EnemyAI indexes this array when switching state
             int stateCount = Enum.GetValues(typeof(State)).Length;
             if (enemyBehaviourStates.Length < stateCount)
