@@ -1,0 +1,257 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1352062519, guid: 9708d15d6a8ee4845ace9be3a2bd936a, type: 3}
+  m_Name: JPOGRaptorEnemyDefinition
+  m_EditorClassIdentifier: 
+  _configEntries: []
+  _tags: []
+  <Key>k__BackingField:
+    _namespace: jpog_raptor
+    _key: raptor
+  <EnemyType>k__BackingField: {fileID: 11400000, guid: 0fbd48b8a1f1bf7498deaba11cb86688, type: 2}
+  <SpawnTable>k__BackingField: 2
+  <BestiaryNodeText>k__BackingField: 'Raptor
+
+
+    Sigurd''s danger level: S
+
+
+    Scientific
+    name: Unkown sub-species
+
+
+    Family: Dromaeosauridae
+
+
+    Clade: Eudromaeosauria
+
+
+    "Raptors
+    are smart. Very smart. Believe me, all the problems we have so far are nothing
+    compared with what we''d have if the raptors ever got out of their holding pen."
+    - Robert Muldoon'
+  <BestiaryWordOverride>k__BackingField: raptor
+  <MoonSpawnWeightsConfig>k__BackingField:
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: vanilla
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: custom
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: experimentation
+    MathOperation: 0
+    Weight: 5
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: vow
+    MathOperation: 0
+    Weight: 15
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: march
+    MathOperation: 0
+    Weight: 30
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: assurance
+    MathOperation: 0
+    Weight: 10
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: offense
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: adamance
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: embrion
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: rend
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: dine
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: titan
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: artifice
+    MathOperation: 0
+    Weight: 20
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_none
+    MathOperation: 2
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_low
+    MathOperation: 0
+    Weight: 1
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_medium
+    MathOperation: 0
+    Weight: 2
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_high
+    MathOperation: 0
+    Weight: 3
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_ultra_high
+    MathOperation: 0
+    Weight: 5
+  <InteriorSpawnWeightsConfig>k__BackingField:
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: vanilla
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: custom
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: facility
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: mansion
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: mineshaft
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_none
+    MathOperation: 2
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_low
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_medium
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_high
+    MathOperation: 0
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_ultra_high
+    MathOperation: 0
+    Weight: 0
+  <WeatherSpawnWeightsConfig>k__BackingField:
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: vanilla
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: custom
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: none
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: rainy
+    MathOperation: 2
+    Weight: 1.3
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: stormy
+    MathOperation: 2
+    Weight: 3
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: foggy
+    MathOperation: 2
+    Weight: 2
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: flooded
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: lethal_company
+      _key: eclipsed
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_none
+    MathOperation: 2
+    Weight: 0
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_low
+    MathOperation: 2
+    Weight: 1
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_medium
+    MathOperation: 2
+    Weight: 1.5
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_high
+    MathOperation: 2
+    Weight: 2
+  - NamespacedKey:
+      _namespace: jpog_raptor
+      _key: raptor_ultra_high
+    MathOperation: 2
+    Weight: 4
+  <RouteSpawnWeightsConfig>k__BackingField: []
+  <GenerateSpawnWeightsConfig>k__BackingField: 1
+  <GeneratePowerLevelConfig>k__BackingField: 1
+  <GenerateMaxSpawnCountConfig>k__BackingField: 1
+  <MoonSpawnWeights>k__BackingField: 
+  <InteriorSpawnWeights>k__BackingField: 
+  <WeatherSpawnWeights>k__BackingField: 

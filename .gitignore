@@ -1,6 +1,22 @@
-UnityProject/Assets/ModAssets/JPOGRaptor/Audio/HitEnemyBody.ogg
-UnityProject/Assets/ModAssets/JPOGRaptor/Audio/HitEnemyBody.ogg.meta
-/UnityProject/Assets/ModAssets/JPOGRaptor/Animations
-/UnityProject/Assets/ModAssets/JPOGRaptor/Audio
-/UnityProject/Assets/ModAssets/JPOGRaptor/Models
-/UnityProject/Assets/ModAssets/JPOGRaptor/Models
+# Blender backups
+*.blend1
+*.blend1.meta
+*.blend[0-9]
+*.blend[0-9].meta
+
+# Build output copied here by the plugin build (Plugin~/JPOGRaptor.csproj.user) and the Dusk export.
+# Keep the .meta files: prefabs reference the plugin DLL by the GUID in its .meta.
+/AssetBundles/*
+!/AssetBundles/jpograptormainassets.duskmod
+!/AssetBundles/jpograptorassets
+!/AssetBundles/*.meta
+# Unity creates these for the build manifests; nothing references them.
+/AssetBundles/*.manifest.meta
+
+# Ripped game assets are not committed (kept from the old UnityProject layout).
+/Content/JPOGRaptor/Animations
+/Content/JPOGRaptor/Animations.meta
+/Content/JPOGRaptor/Audio
+/Content/JPOGRaptor/Audio.meta
+/Content/JPOGRaptor/Models
+/Content/JPOGRaptor/Models.meta
