@@ -20,3 +20,6 @@
 /Content/JPOGRaptor/Audio.meta
 /Content/JPOGRaptor/Models
 /Content/JPOGRaptor/Models.meta
+
+# The Raptor Blender source contains the ripped game model, like the Content folders above.
+/AssetSources~/Blender/*.blend
