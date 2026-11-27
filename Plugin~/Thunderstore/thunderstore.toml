@@ -21,9 +21,14 @@ outdir = "./Packages"
 source = "../bin/Release/netstandard2.1/JPOGRaptor.dll"
 target = "plugins/JPOGRaptor/"
 
+# The Dusk export from the Unity project: the .duskmod next to the DLL, the content bundle in an Assets/ subfolder (Dusk only loads it from there).
+[[build.copy]]
+source = "../../AssetBundles/jpograptormainassets.duskmod"
+target = "plugins/JPOGRaptor/"
+
 [[build.copy]]
 source = "../../AssetBundles/jpograptorassets"
-target = "plugins/JPOGRaptor/"
+target = "plugins/JPOGRaptor/Assets/"
 
 [[build.copy]]
 source = "../../Package/CHANGELOG.md"
