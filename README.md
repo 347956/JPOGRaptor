@@ -68,7 +68,7 @@ This repository is a folder that goes inside the `Assets/` folder of a Lethal Co
 | `Plugin~/` | The C# plugin. The `~` is on purpose: Unity ignores folders ending in `~`, so it doesn't try to compile the BepInEx code. |
 | `Tests~/` | xUnit tests for the plain C# rules in `Plugin~/src`. |
 | `Screenshots~/` | Screenshots for this README. |
-| `AssetSources~/` | The Blender source (`RaptorV2.blend`, gitignored like the ripped assets in `Content/`). |
+| `AssetSources~/` | The Blender source (`RaptorV2.blend`). |
 
 > [!NOTE]
 > The Raptor's `Content/JPOGRaptor/Animations`, `Audio` and `Models` folders are gitignored (ripped game assets). Copy them in from your local Unity project before working on the prefab.
