@@ -13,10 +13,6 @@
 # Unity creates these for the build manifests; nothing references them.
 /AssetBundles/*.manifest.meta
 
-# Ripped game assets are not committed (kept from the old UnityProject layout).
-/Content/JPOGRaptor/Animations
-/Content/JPOGRaptor/Animations.meta
+# Local game audio from the host Unity project.
 /Content/JPOGRaptor/Audio
 /Content/JPOGRaptor/Audio.meta
-/Content/JPOGRaptor/Models
-/Content/JPOGRaptor/Models.meta

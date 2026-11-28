@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -44,6 +45,18 @@ namespace JPOGBuild
                 return new AssetBundleBuild { assetBundleName = bundle, assetNames = assets };
             }).ToArray();
 
+            // Folder labels pick up draft clips too. Keep clips referenced by runtime assets in either bundle.
+            string[] runtimeAssets = builds.SelectMany(build => build.assetNames)
+                .Where(path => !IsAnimationClip(path))
+                .ToArray();
+            var runtimeDependencies = new HashSet<string>(AssetDatabase.GetDependencies(runtimeAssets));
+            for (int i = 0; i < builds.Length; i++)
+            {
+                builds[i].assetNames = builds[i].assetNames
+                    .Where(path => !IsAnimationClip(path) || runtimeDependencies.Contains(path))
+                    .ToArray();
+            }
+
             // Both bundles in one build so Unity resolves the references between them.
             // LZ4 (chunk based) like LCDrone: faster to load than LZMA, a bit bigger.
             var manifest = BuildPipeline.BuildAssetBundles(outDir, builds,
@@ -54,7 +67,10 @@ namespace JPOGBuild
                 Debug.Log("[JPOGRaptor] Built " + bundle + ": " + new FileInfo(Path.Combine(outDir, bundle)).Length + " bytes");
             Debug.Log("[JPOGRaptor] Bundles written to " + outDir + ". Run dotnet build in Plugin~ to deploy them.");
         }
-            /// <summary>
+
+        static bool IsAnimationClip(string path) => path.EndsWith(".anim", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Fails the build when an enemy prefab's AI component (the MonoBehaviour with an enemyType field)
         /// has no script or no enemyType. LethalLevelLoader rejects such an enemy and its error breaks
         /// StartOfRound.Awake, so a new save throws errors everywhere.
