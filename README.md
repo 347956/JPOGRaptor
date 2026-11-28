@@ -63,15 +63,19 @@ This repository is a folder that goes inside the `Assets/` folder of a Lethal Co
 | `Content/JPOGRaptor/` | The enemy: prefab, model, animations, materials, audio, bestiary entries and Dusk registry assets. |
 | `JPOGRaptorContentContainer.asset`, `JPOGRaptorModInformation.asset` | The Dusk content container and mod information for the Dusk export. |
 | `Package/` | README, changelog and icon of the Thunderstore package (referenced by the mod information). |
-| `AssetBundles/` | Build output: the plugin DLL and the exported bundles. Only the `.meta` files are committed; the prefab references the DLL by the GUID in its `.meta`. |
+| `AssetBundles/` | The committed Dusk bundles and the locally built plugin DLL. The prefab references the DLL by the GUID in its committed `.meta`. |
 | `Editor/` | The Unity editor script that builds this mod's bundles (menu JPOG > Build JPOGRaptor bundles). |
 | `Plugin~/` | The C# plugin. The `~` is on purpose: Unity ignores folders ending in `~`, so it doesn't try to compile the BepInEx code. |
 | `Tests~/` | xUnit tests for the plain C# rules in `Plugin~/src`. |
 | `Screenshots~/` | Screenshots for this README. |
-| `AssetSources~/` | The Blender source (`RaptorV2.blend`). |
+| `AssetSources~/` | The Blender source (`RaptorV2.blend`) and armature-only FBX takes in `FBX/`. |
 
 > [!NOTE]
-> The Raptor's `Content/JPOGRaptor/Animations`, `Audio` and `Models` folders are gitignored (ripped game assets). Copy them in from your local Unity project before working on the prefab.
+> Copy `Content/JPOGRaptor/Audio` and its Unity `.meta` files from the host project before building the bundles. The audio stays local.
+
+`Models/RaptorV2.fbx` is the skinned rest-pose model. The Animator uses the standalone Unity clips in `Content/JPOGRaptor/Animations/`, which carry the gameplay timing and audio events. Keep the hand-edited `Pounce.anim` for runtime playback. The AI drives the forward lunge.
+
+Unity skips `AssetSources~/FBX/`, which holds the separate 30 fps source takes. Turn on **Preserve Hierarchy** if you import one for editing so its paths retain the top-level `Raptor` transform.
 
 ## Building 🔨
 
