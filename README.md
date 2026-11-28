@@ -97,6 +97,16 @@ This repository is a folder that goes inside the `Assets/` folder of a Lethal Co
 > [!IMPORTANT]
 > Build the DLL before opening the Unity project after a fresh clone. If the DLL is missing, Unity deletes its `.meta` file and the prefab loses its AI script.
 
+### GitHub Actions ⚙️
+
+- **Build and test** (`.github/workflows/build.yml`) runs on every push and pull request to `main`. It runs the xUnit projects in `Tests~/` (Debug and Release), builds the plugin with `CI=true`, which takes the game assemblies from the `LethalCompany.GameLibs.Steam` NuGet package, and packs the Thunderstore ZIP. The ZIP and the Debug DLL are uploaded as run artifacts.
+- **GitHub release** (`.github/workflows/release.yml`) runs on every push to `main`. If the tag `v<Version>` for the `<Version>` in `Plugin~/JPOGRaptor.csproj` doesn't exist yet, it tests, builds and checks the package, then creates the tag and a GitHub Release with the ZIP attached. It doesn't upload to Thunderstore.
+- **Thunderstore publish** (`.github/workflows/thunderstore.yml`) runs only by hand (Actions > Thunderstore publish > Run workflow, with a tag such as `v1.2.0`). It downloads the ZIP from that GitHub Release, checks it, and uploads it with tcli using the `TCLI_AUTH_TOKEN_JPOGRAPTOR` secret. It skips versions already on Thunderstore. Test the GitHub Release ZIP in game before running it.
+
+  To release, raise `<Version>` in the csproj and the version in `JPOGRaptorModInformation.asset` together, add a `## <version>` entry to `Package/CHANGELOG.md`, and rebuild and commit the bundles. The workflow stops if any of these is missing. You can also push a `v<version>` tag, or run the workflow by hand with an existing tag to retry.
+
+CI builds can't build the Unity bundles. They package the bundles committed in `AssetBundles/`.
+
 ## Credits 🗣️
 - [EvaisaDev](https://github.com/EvaisaDev) - [LethalLib](https://github.com/EvaisaDev/LethalLib)  
 - [Lordfirespeed](https://github.com/Lordfirespeed) - reference tcli usage in LethalLib  
