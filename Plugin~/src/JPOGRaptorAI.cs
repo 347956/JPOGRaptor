@@ -45,6 +45,7 @@ namespace JPOGRaptor {
 
 
         private const float TurnSyncInterval = 0.1f;
+        private static readonly int MoveSpeedParameter = Animator.StringToHash("moveSpeed");
         private static readonly int TurnAmountParameter = Animator.StringToHash("turnAmount");
         private static readonly int LocomotionState = Animator.StringToHash("Locomotion");
         private static readonly int AttackOrCallTag = Animator.StringToHash("AttackOrCall");
@@ -55,6 +56,7 @@ namespace JPOGRaptor {
         private int bodyTurnsLayer = -1;
         private float previousYaw;
         private float nextTurnSyncTime;
+        private RaptorFootIk? footIk;
 
         public RoundManager RoundManager { get; private set; }  = null!;
         //public StartOfRound startOfRound { get; private set; } = null!;
@@ -156,6 +158,7 @@ namespace JPOGRaptor {
             headLayer = creatureAnimator.GetLayerIndex("Head");
             bodyTurnsLayer = creatureAnimator.GetLayerIndex("Body Turns");
             previousYaw = transform.eulerAngles.y;
+            footIk = RaptorFootIk.Create(creatureAnimator);
             LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
             timeSinceHittingOtherEnemy = 0;
@@ -166,6 +169,11 @@ namespace JPOGRaptor {
             SeMovementSpeedPerSate(State.SearchingForPlayer);
             // We make the enemy start searching. This will make it start wandering around.
             StartSearch(transform.position);
+        }
+
+        private void OnDisable()
+        {
+            footIk?.Reset();
         }
 
         public override void OnDestroy()
@@ -201,6 +209,7 @@ namespace JPOGRaptor {
 
 
         public override void Update() {
+            footIk?.RestoreAnimatedPose();
             base.Update();
 
             if (isEnemyDead) {
@@ -238,7 +247,7 @@ namespace JPOGRaptor {
                     CurrentSpeed.Value = velocity;
                 }
             }
-            creatureAnimator.SetFloat("moveSpeed", CurrentSpeed.Value);
+            creatureAnimator.SetFloat(MoveSpeedParameter, CurrentSpeed.Value);
 
             if (targetPlayer != null && state != (int)State.SearchingForPlayer && state != (int)State.FleeingFromPlayer
                 && state != (int)State.HidingFromPlayer)
@@ -313,26 +322,44 @@ namespace JPOGRaptor {
             return Mathf.Sign(degreesPerSecond) * Mathf.InverseLerp(10f, 180f, Mathf.Abs(degreesPerSecond));
         }
 
-        private bool LocomotionAllowsCorrections()
-        {
-            if (!ventAnimationFinished || isEnemyDead || stunNormalizedTimer > 0f
-                || walkLayer < 0 || !creatureAnimator.isActiveAndEnabled
-                || creatureAnimator.IsInTransition(walkLayer)
-                || creatureAnimator.GetCurrentAnimatorStateInfo(walkLayer).shortNameHash != LocomotionState
-                || (IsOwner && (raptorPounceHelper.IsPouncing || isClimbing
-                    || !agent.enabled || !agent.isOnNavMesh || agent.isOnOffMeshLink)))
-            {
-                return false;
-            }
+        private bool LocomotionAllowsCorrections() => IsLocomotionPose() && !IsHeadActionPlaying();
 
+        private bool IsLocomotionPose()
+        {
+            return ventAnimationFinished && !isEnemyDead && stunNormalizedTimer <= 0f
+                && walkLayer >= 0 && creatureAnimator.isActiveAndEnabled
+                && !creatureAnimator.IsInTransition(walkLayer)
+                && creatureAnimator.GetCurrentAnimatorStateInfo(walkLayer).shortNameHash == LocomotionState
+                && (!IsOwner || (!raptorPounceHelper.IsPouncing && !isClimbing
+                    && agent.enabled && agent.isOnNavMesh && !agent.isOnOffMeshLink));
+        }
+
+        private bool IsHeadActionPlaying()
+        {
             if (headLayer < 0)
-                return true;
+                return false;
 
             var head = creatureAnimator.GetCurrentAnimatorStateInfo(headLayer);
             // Head actions can hold their last frame until another trigger arrives.
-            return !(head.tagHash == AttackOrCallTag && head.normalizedTime < 1f)
-                && (!creatureAnimator.IsInTransition(headLayer)
-                    || creatureAnimator.GetNextAnimatorStateInfo(headLayer).tagHash != AttackOrCallTag);
+            return (head.tagHash == AttackOrCallTag && head.normalizedTime < 1f)
+                || (creatureAnimator.IsInTransition(headLayer)
+                    && creatureAnimator.GetNextAnimatorStateInfo(headLayer).tagHash == AttackOrCallTag);
+        }
+
+        private void LateUpdate()
+        {
+            if (footIk == null)
+                return;
+
+            if (!IsLocomotionPose())
+            {
+                footIk.Reset();
+                return;
+            }
+
+            float phase = creatureAnimator.GetCurrentAnimatorStateInfo(walkLayer).normalizedTime;
+            float turn = bodyTurnsLayer >= 0 ? creatureAnimator.GetFloat(TurnAmountParameter) : 0f;
+            footIk.Apply(phase, creatureAnimator.GetFloat(MoveSpeedParameter), turn, !IsHeadActionPlaying(), Time.deltaTime);
         }
 
         private void DropLoot()
