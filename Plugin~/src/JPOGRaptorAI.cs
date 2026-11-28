@@ -44,6 +44,18 @@ namespace JPOGRaptor {
         );
 
 
+        private const float TurnSyncInterval = 0.1f;
+        private static readonly int TurnAmountParameter = Animator.StringToHash("turnAmount");
+        private static readonly int LocomotionState = Animator.StringToHash("Locomotion");
+        private static readonly int AttackOrCallTag = Animator.StringToHash("AttackOrCall");
+        private readonly NetworkVariable<float> animatorTurn = new(
+            0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+        private int walkLayer = -1;
+        private int headLayer = -1;
+        private int bodyTurnsLayer = -1;
+        private float previousYaw;
+        private float nextTurnSyncTime;
+
         public RoundManager RoundManager { get; private set; }  = null!;
         //public StartOfRound startOfRound { get; private set; } = null!;
         private RaptorPounceHelper raptorPounceHelper = null!;
@@ -140,6 +152,10 @@ namespace JPOGRaptor {
         public override void Start() {
             base.Start();
             AssignImportantValues();
+            walkLayer = creatureAnimator.GetLayerIndex("Walk Layer");
+            headLayer = creatureAnimator.GetLayerIndex("Head");
+            bodyTurnsLayer = creatureAnimator.GetLayerIndex("Body Turns");
+            previousYaw = transform.eulerAngles.y;
             LogIfDebugBuild($"JPOGRaptor[{RaptorId}]: Spawned");
             timeSinceHittingLocalPlayer = 0;
             timeSinceHittingOtherEnemy = 0;
@@ -188,6 +204,9 @@ namespace JPOGRaptor {
             base.Update();
 
             if (isEnemyDead) {
+                if (bodyTurnsLayer >= 0 && creatureAnimator.isActiveAndEnabled)
+                    creatureAnimator.SetLayerWeight(bodyTurnsLayer, 0f);
+
                 // For some weird reason I can't get an RPC to get called from HitEnemy() (works from other methods), so we do this workaround. We just want the enemy to stop playing the song.
                 if (!isDeadAnimationDone) {
                     LogIfDebugBuild("Stopping enemy voice with janky code.");
@@ -245,6 +264,7 @@ namespace JPOGRaptor {
                 wasStunned = false;
                 SeMovementSpeedPerSate((State)currentBehaviourStateIndex);
             }
+            UpdateTurnAnimation();
             timeSinceHittingLocalPlayer += Time.deltaTime;
             timeSinceHittingOtherEnemy += Time.deltaTime;
             raptorPounceHelper.UpdateTimeSincePounceAttack();
@@ -253,6 +273,66 @@ namespace JPOGRaptor {
             {
                 LogIfDebugBuild($"[WARN] Raptor[{RaptorId}] has target but speed is zero! Current state: {(State)currentBehaviourStateIndex}");
             }
+        }
+
+        private void UpdateTurnAnimation()
+        {
+            float yaw = transform.eulerAngles.y;
+            float yawDelta = Mathf.DeltaAngle(previousYaw, yaw);
+            previousYaw = yaw;
+            if (bodyTurnsLayer < 0 || !creatureAnimator.isActiveAndEnabled)
+                return;
+
+            float deltaTime = Time.deltaTime;
+            bool canTurn = LocomotionAllowsCorrections();
+            float turn = animatorTurn.Value;
+            if (IsOwner)
+            {
+                turn = canTurn && CurrentSpeed.Value > 0.25f ? CalculateTurnAmount(yawDelta, deltaTime) : 0f;
+                float sample = Mathf.Round(turn * 10f) / 10f;
+                if (IsSpawned && sample != animatorTurn.Value && (sample == 0f || Time.time >= nextTurnSyncTime))
+                {
+                    animatorTurn.Value = sample;
+                    nextTurnSyncTime = Time.time + TurnSyncInterval;
+                }
+            }
+
+            creatureAnimator.SetFloat(TurnAmountParameter, canTurn ? turn : 0f, 0.1f, deltaTime);
+            float weight = Mathf.MoveTowards(creatureAnimator.GetLayerWeight(bodyTurnsLayer), canTurn ? 1f : 0f,
+                deltaTime / 0.1f);
+            creatureAnimator.SetLayerWeight(bodyTurnsLayer, weight);
+        }
+
+        private static float CalculateTurnAmount(float yawDelta, float deltaTime)
+        {
+            // Ignore rotation snaps. The animator follows the visible navigation heading.
+            if (deltaTime <= 0f || Mathf.Abs(yawDelta) >= 45f)
+                return 0f;
+
+            float degreesPerSecond = yawDelta / deltaTime;
+            return Mathf.Sign(degreesPerSecond) * Mathf.InverseLerp(10f, 180f, Mathf.Abs(degreesPerSecond));
+        }
+
+        private bool LocomotionAllowsCorrections()
+        {
+            if (!ventAnimationFinished || isEnemyDead || stunNormalizedTimer > 0f
+                || walkLayer < 0 || !creatureAnimator.isActiveAndEnabled
+                || creatureAnimator.IsInTransition(walkLayer)
+                || creatureAnimator.GetCurrentAnimatorStateInfo(walkLayer).shortNameHash != LocomotionState
+                || (IsOwner && (raptorPounceHelper.IsPouncing || isClimbing
+                    || !agent.enabled || !agent.isOnNavMesh || agent.isOnOffMeshLink)))
+            {
+                return false;
+            }
+
+            if (headLayer < 0)
+                return true;
+
+            var head = creatureAnimator.GetCurrentAnimatorStateInfo(headLayer);
+            // Head actions can hold their last frame until another trigger arrives.
+            return !(head.tagHash == AttackOrCallTag && head.normalizedTime < 1f)
+                && (!creatureAnimator.IsInTransition(headLayer)
+                    || creatureAnimator.GetNextAnimatorStateInfo(headLayer).tagHash != AttackOrCallTag);
         }
 
         private void DropLoot()

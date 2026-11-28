@@ -1231,7 +1231,6 @@ GameObject:
   - component: {fileID: 5218952079641633025}
   - component: {fileID: 242483001244820256}
   - component: {fileID: 7541430673778189535}
-  - component: {fileID: 533708488950091024}
   - component: {fileID: 1262413881985738285}
   - component: {fileID: 2756116847427979949}
   - component: {fileID: 7714716217040879978}
@@ -1328,34 +1327,6 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!114 &533708488950091024
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3796245175031372056}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e8d0727d5ae3244e3b569694d3912374, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  TransitionStateInfoList:
-  - IsCrossFadeExit: 0
-    Layer: 0
-    OriginatingState: -2089788878
-    DestinationState: 1980213187
-    TransitionDuration: 0.25
-    TriggerNameHash: 1849064507
-    TransitionIndex: 1
-  - IsCrossFadeExit: 0
-    Layer: 1
-    OriginatingState: 2136002017
-    DestinationState: -499022955
-    TransitionDuration: 0.25
-    TriggerNameHash: 978144638
-    TransitionIndex: 0
-  m_Animator: {fileID: 7541430673778189535}
 --- !u!114 &1262413881985738285
 MonoBehaviour:
   m_ObjectHideFlags: 0
